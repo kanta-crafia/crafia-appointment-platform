@@ -3,7 +3,7 @@ import { supabase, type Allocation } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLocation, useSearch } from 'wouter';
 import { PageHeader } from '@/components/PageHeader';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -37,7 +37,7 @@ export default function NewAppointment() {
     setLoading(true);
     const { data } = await supabase
       .from('allocations')
-      .select('*, project:projects(title)')
+      .select('*, project:projects(*)')
       .eq('child_org_id', user.org_id)
       .eq('status', 'active');
     setAllocations(data || []);
@@ -47,6 +47,7 @@ export default function NewAppointment() {
   useEffect(() => { fetchAllocations(); }, [fetchAllocations]);
 
   const selectedAlloc = allocations.find(a => a.id === allocationId);
+  const selectedProject = selectedAlloc ? (selectedAlloc as any).project : null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,6 +58,15 @@ export default function NewAppointment() {
     if (!selectedAlloc) {
       toast.error('割り当てを選択してください');
       return;
+    }
+
+    // Check project limit
+    if (selectedProject && !selectedProject.is_unlimited) {
+      const remaining = selectedProject.max_appointments_total - selectedProject.confirmed_count;
+      if (remaining <= 0) {
+        toast.error('この案件の上限に達しています');
+        return;
+      }
     }
 
     setSaving(true);
@@ -102,29 +112,36 @@ export default function NewAppointment() {
         <CardContent className="pt-6">
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-2">
-              <Label>割り当て案件 *</Label>
+              <Label>割り当て案件 <span className="text-destructive">*</span></Label>
               <Select value={allocationId} onValueChange={setAllocationId}>
                 <SelectTrigger><SelectValue placeholder="案件を選択" /></SelectTrigger>
                 <SelectContent>
                   {allocations.map(a => {
-                    const remaining = a.max_appointments_for_child - a.confirmed_count;
+                    const proj = (a as any).project;
+                    const isUnlimited = proj?.is_unlimited;
+                    const remaining = isUnlimited ? null : (proj?.max_appointments_total || 0) - (proj?.confirmed_count || 0);
+                    const isFull = !isUnlimited && remaining !== null && remaining <= 0;
                     return (
-                      <SelectItem key={a.id} value={a.id} disabled={remaining <= 0}>
-                        {(a as any).project?.title} (残{remaining}件)
+                      <SelectItem key={a.id} value={a.id} disabled={isFull}>
+                        {proj?.title}{isUnlimited ? '' : ` (残${remaining}件)`}{isFull ? ' — 上限到達' : ''}
                       </SelectItem>
                     );
                   })}
                 </SelectContent>
               </Select>
-              {selectedAlloc && (
+              {selectedAlloc && selectedProject && (
                 <p className="text-xs text-muted-foreground">
-                  単価: ¥{Number(selectedAlloc.payout_per_appointment).toLocaleString()} / 残枠: {selectedAlloc.max_appointments_for_child - selectedAlloc.confirmed_count}件
+                  卸単価: ¥{Number(selectedAlloc.payout_per_appointment).toLocaleString()}
+                  {selectedProject.is_unlimited
+                    ? ' / 上限: 無制限'
+                    : ` / 残枠: ${selectedProject.max_appointments_total - selectedProject.confirmed_count}件`
+                  }
                 </p>
               )}
             </div>
 
             <div className="space-y-2">
-              <Label>対象企業名 *</Label>
+              <Label>対象企業名 <span className="text-destructive">*</span></Label>
               <Input value={targetCompany} onChange={(e) => setTargetCompany(e.target.value)} placeholder="株式会社〇〇" required />
             </div>
 
@@ -134,7 +151,7 @@ export default function NewAppointment() {
             </div>
 
             <div className="space-y-2">
-              <Label>商談日時 *</Label>
+              <Label>商談日時 <span className="text-destructive">*</span></Label>
               <Input type="datetime-local" value={meetingDatetime} onChange={(e) => setMeetingDatetime(e.target.value)} required />
             </div>
 

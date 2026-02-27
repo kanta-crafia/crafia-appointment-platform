@@ -1,9 +1,13 @@
-# ユーザー管理機能拡張 TODO
+# 変更タスク TODO
 
-- [ ] Supabase: admin_update_user RPC関数を作成（氏名、ロール、ステータス、login_id、所属企業の変更）
-- [ ] Supabase: admin_delete_user RPC関数を作成（auth.usersとpublic.usersの両方を削除）
-- [ ] フロント: ユーザー一覧に編集・削除ボタンを追加
-- [ ] フロント: ユーザー編集ダイアログを作成
-- [ ] フロント: ユーザー削除確認ダイアログを作成
-- [ ] テスト・動作確認
-- [ ] チェックポイント保存
+## DB変更
+- [ ] projectsテーブルにカラム追加: project_number, company_name, service_name, service_overview, project_detail, acquisition_conditions, scheduling_url, priority, monthly_limit(null=無限)
+- [ ] allocationsテーブルからmax_appointments, conditionsを削除（シンプル化）
+
+## フロントエンド
+- [ ] 案件管理画面: 入力項目を拡張
+- [ ] 割り当て管理画面: パートナーごとの上限・条件を削除
+- [ ] ユーザー一覧: 削除ボタンが表示されるよう修正
+
+## メール通知
+- [ ] アポ獲得時にCrafia本部へメール通知を送信

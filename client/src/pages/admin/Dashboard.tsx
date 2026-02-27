@@ -99,22 +99,29 @@ export default function AdminDashboard() {
             ) : (
               <div className="space-y-3">
                 {projects.map((p) => {
-                  const remaining = p.max_appointments_total - p.confirmed_count;
-                  const pct = p.max_appointments_total > 0 ? (p.confirmed_count / p.max_appointments_total) * 100 : 0;
+                  const isUnlimited = p.is_unlimited;
+                  const remaining = isUnlimited ? null : p.max_appointments_total - p.confirmed_count;
+                  const pct = !isUnlimited && p.max_appointments_total > 0 ? (p.confirmed_count / p.max_appointments_total) * 100 : 0;
                   return (
                     <div key={p.id} className="flex items-center gap-3">
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate">{p.title}</p>
                         <div className="flex items-center gap-2 mt-1">
-                          <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                            <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${Math.min(pct, 100)}%` }} />
-                          </div>
-                          <span className="text-xs text-muted-foreground whitespace-nowrap">
-                            {p.confirmed_count}/{p.max_appointments_total}
-                          </span>
+                          {!isUnlimited ? (
+                            <>
+                              <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                                <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${Math.min(pct, 100)}%` }} />
+                              </div>
+                              <span className="text-xs text-muted-foreground whitespace-nowrap">
+                                {p.confirmed_count}/{p.max_appointments_total}
+                              </span>
+                            </>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">確定: {p.confirmed_count}（無制限）</span>
+                          )}
                         </div>
                       </div>
-                      <span className="text-xs text-muted-foreground whitespace-nowrap">残{remaining}</span>
+                      <span className="text-xs text-muted-foreground whitespace-nowrap">{isUnlimited ? '' : `残${remaining}`}</span>
                     </div>
                   );
                 })}

@@ -15,7 +15,7 @@ export default function PartnerDashboard() {
     if (!user) return;
     setLoading(true);
     const [allocRes, apptRes] = await Promise.all([
-      supabase.from('allocations').select('*, project:projects(title, status)').eq('child_org_id', user.org_id).eq('status', 'active'),
+      supabase.from('allocations').select('*, project:projects(*)').eq('child_org_id', user.org_id).eq('status', 'active'),
       supabase.from('appointments').select('*').eq('org_id', user.org_id),
     ]);
     setAllocations(allocRes.data || []);
@@ -27,14 +27,12 @@ export default function PartnerDashboard() {
 
   const pendingCount = appointments.filter(a => a.status === 'pending').length;
   const approvedCount = appointments.filter(a => a.status === 'approved').length;
-  const totalAllocMax = allocations.reduce((sum, a) => sum + a.max_appointments_for_child, 0);
-  const totalConfirmed = allocations.reduce((sum, a) => sum + a.confirmed_count, 0);
 
   const statCards = [
     { label: '割り当て案件', value: allocations.length, sub: '有効な案件数', icon: Briefcase, color: 'text-blue-600 bg-blue-50' },
-    { label: '承認済アポ', value: approvedCount, sub: `上限: ${totalAllocMax}`, icon: TrendingUp, color: 'text-emerald-600 bg-emerald-50' },
+    { label: '承認済アポ', value: approvedCount, sub: '自社獲得分', icon: TrendingUp, color: 'text-emerald-600 bg-emerald-50' },
     { label: '承認待ち', value: pendingCount, sub: '確認中', icon: Clock, color: 'text-amber-600 bg-amber-50' },
-    { label: '残りアポ枠', value: totalAllocMax - totalConfirmed, sub: `確定: ${totalConfirmed}`, icon: ClipboardCheck, color: 'text-violet-600 bg-violet-50' },
+    { label: '合計登録数', value: appointments.length, sub: '全ステータス', icon: ClipboardCheck, color: 'text-violet-600 bg-violet-50' },
   ];
 
   if (loading) {
@@ -75,23 +73,36 @@ export default function PartnerDashboard() {
           ) : (
             <div className="space-y-4">
               {allocations.map((a) => {
-                const remaining = a.max_appointments_for_child - a.confirmed_count;
-                const pct = a.max_appointments_for_child > 0 ? (a.confirmed_count / a.max_appointments_for_child) * 100 : 0;
+                const proj = (a as any).project;
+                const isUnlimited = proj?.is_unlimited;
+                const maxTotal = proj?.max_appointments_total || 0;
+                const confirmed = proj?.confirmed_count || 0;
+                const pct = !isUnlimited && maxTotal > 0 ? (confirmed / maxTotal) * 100 : 0;
+                // Count appointments for this specific project by this org
+                const myAppts = appointments.filter(ap => ap.project_id === a.project_id);
+                const myApproved = myAppts.filter(ap => ap.status === 'approved').length;
+                const myPending = myAppts.filter(ap => ap.status === 'pending').length;
                 return (
                   <div key={a.id}>
                     <div className="flex items-center justify-between mb-1">
-                      <p className="text-sm font-medium">{(a as any).project?.title || '案件'}</p>
+                      <p className="text-sm font-medium">{proj?.title || '案件'}</p>
                       <span className="text-xs text-muted-foreground">
-                        {a.confirmed_count}/{a.max_appointments_for_child} (残{remaining})
+                        {isUnlimited ? `確定: ${confirmed}（無制限）` : `${confirmed}/${maxTotal}`}
                       </span>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <div className="flex-1 h-2.5 bg-muted rounded-full overflow-hidden">
-                        <div className="h-full bg-emerald-500 rounded-full transition-all duration-500" style={{ width: `${Math.min(pct, 100)}%` }} />
+                    {!isUnlimited && (
+                      <div className="flex items-center gap-3">
+                        <div className="flex-1 h-2.5 bg-muted rounded-full overflow-hidden">
+                          <div className="h-full bg-emerald-500 rounded-full transition-all duration-500" style={{ width: `${Math.min(pct, 100)}%` }} />
+                        </div>
+                        <span className="text-xs font-medium text-muted-foreground w-10 text-right">{Math.round(pct)}%</span>
                       </div>
-                      <span className="text-xs font-medium text-muted-foreground w-10 text-right">{Math.round(pct)}%</span>
+                    )}
+                    <div className="flex gap-4 mt-1">
+                      <p className="text-xs text-muted-foreground">自社承認: {myApproved}件</p>
+                      <p className="text-xs text-muted-foreground">自社待ち: {myPending}件</p>
+                      <p className="text-xs text-muted-foreground">卸単価: ¥{Number(a.payout_per_appointment).toLocaleString()}/アポ</p>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-1">単価: ¥{Number(a.payout_per_appointment).toLocaleString()}/アポ</p>
                   </div>
                 );
               })}

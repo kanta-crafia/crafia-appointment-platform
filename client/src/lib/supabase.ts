@@ -19,6 +19,7 @@ export type ProjectStatus = 'active' | 'inactive' | 'closed';
 export type AllocationStatus = 'active' | 'inactive';
 export type AppointmentStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
 export type OrgStatus = 'active' | 'inactive';
+export type Priority = 'high' | 'normal' | 'low';
 
 export interface Organization {
   id: string;
@@ -43,6 +44,16 @@ export interface Project {
   id: string;
   title: string;
   description: string | null;
+  project_number: string | null;
+  company_name: string | null;
+  service_name: string | null;
+  service_overview: string | null;
+  project_detail: string | null;
+  acquisition_conditions: string | null;
+  unit_price: number;
+  scheduling_url: string | null;
+  priority: Priority;
+  is_unlimited: boolean;
   start_date: string | null;
   end_date: string | null;
   max_appointments_total: number;
@@ -58,9 +69,6 @@ export interface Allocation {
   parent_org_id: string;
   child_org_id: string;
   payout_per_appointment: number;
-  max_appointments_for_child: number;
-  confirmed_count: number;
-  conditions_json: Record<string, unknown> | null;
   status: AllocationStatus;
   created_at: string;
   // Joined fields
