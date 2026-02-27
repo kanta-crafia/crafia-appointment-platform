@@ -1,0 +1,104 @@
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+// Types based on our DB schema
+export type UserRole = 'admin' | 'partner' | 'sub_partner' | 'approver';
+export type ProjectStatus = 'active' | 'inactive' | 'closed';
+export type AllocationStatus = 'active' | 'inactive';
+export type AppointmentStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
+export type OrgStatus = 'active' | 'inactive';
+
+export interface Organization {
+  id: string;
+  name: string;
+  parent_org_id: string | null;
+  status: OrgStatus;
+  created_at: string;
+}
+
+export interface User {
+  id: string;
+  org_id: string;
+  full_name: string | null;
+  email: string;
+  role: UserRole;
+  status: 'active' | 'inactive';
+  created_at: string;
+}
+
+export interface Project {
+  id: string;
+  title: string;
+  description: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  max_appointments_total: number;
+  confirmed_count: number;
+  status: ProjectStatus;
+  created_at: string;
+  created_by: string | null;
+}
+
+export interface Allocation {
+  id: string;
+  project_id: string;
+  parent_org_id: string;
+  child_org_id: string;
+  payout_per_appointment: number;
+  max_appointments_for_child: number;
+  confirmed_count: number;
+  conditions_json: Record<string, unknown> | null;
+  status: AllocationStatus;
+  created_at: string;
+  // Joined fields
+  project?: Project;
+  parent_org?: Organization;
+  child_org?: Organization;
+}
+
+export interface Appointment {
+  id: string;
+  project_id: string;
+  allocation_id: string;
+  created_by_user_id: string;
+  org_id: string;
+  target_company_name: string;
+  contact_person: string | null;
+  meeting_datetime: string;
+  notes: string | null;
+  evidence_url: string | null;
+  status: AppointmentStatus;
+  approved_by: string | null;
+  approved_at: string | null;
+  rejected_reason: string | null;
+  created_at: string;
+  // Joined fields
+  project?: Project;
+  allocation?: Allocation;
+  organization?: Organization;
+  creator?: User;
+}
+
+export interface Notification {
+  id: number;
+  recipient_user_id: string;
+  type: string;
+  payload_json: Record<string, unknown> | null;
+  is_read: boolean;
+  created_at: string;
+}
+
+export interface AuditLog {
+  id: number;
+  actor_user_id: string | null;
+  action: string;
+  entity_type: string;
+  entity_id: string | null;
+  before_json: Record<string, unknown> | null;
+  after_json: Record<string, unknown> | null;
+  created_at: string;
+}
