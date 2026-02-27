@@ -1,12 +1,9 @@
-# ログイン方式変更 TODO
+# ユーザー管理機能拡張 TODO
 
-- [ ] Supabase: usersテーブルにlogin_id, password_hash カラム追加
-- [ ] Supabase: login_idのユニーク制約追加
-- [ ] Supabase: カスタムログイン用RPC関数作成（login_id + password → JWT）
-- [ ] Supabase: Adminユーザーのlogin_id設定
-- [ ] フロント: ログイン画面をユーザーID+PW方式に変更
-- [ ] フロント: AuthContextをカスタム認証に対応
-- [ ] フロント: 企業管理画面でユーザーのlogin_id/PW表示・編集機能追加
-- [ ] フロント: Admin用ユーザー管理でPWリセット機能追加
+- [ ] Supabase: admin_update_user RPC関数を作成（氏名、ロール、ステータス、login_id、所属企業の変更）
+- [ ] Supabase: admin_delete_user RPC関数を作成（auth.usersとpublic.usersの両方を削除）
+- [ ] フロント: ユーザー一覧に編集・削除ボタンを追加
+- [ ] フロント: ユーザー編集ダイアログを作成
+- [ ] フロント: ユーザー削除確認ダイアログを作成
 - [ ] テスト・動作確認
 - [ ] チェックポイント保存
