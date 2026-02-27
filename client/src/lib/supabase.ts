@@ -23,8 +23,9 @@ export interface Organization {
 export interface User {
   id: string;
   org_id: string;
+  login_id: string | null;
   full_name: string | null;
-  email: string;
+  email: string | null;
   role: UserRole;
   status: 'active' | 'inactive';
   created_at: string;

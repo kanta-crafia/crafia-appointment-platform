@@ -11,14 +11,18 @@ import { toast } from 'sonner';
 export default function Login() {
   const { signIn } = useAuth();
   const [, navigate] = useLocation();
-  const [email, setEmail] = useState('');
+  const [loginId, setLoginId] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!loginId.trim() || !password.trim()) {
+      toast.error('ユーザーIDとパスワードを入力してください');
+      return;
+    }
     setLoading(true);
-    const { error } = await signIn(email, password);
+    const { error } = await signIn(loginId.trim(), password);
     setLoading(false);
     if (error) {
       toast.error('ログインに失敗しました', { description: error });
@@ -40,20 +44,21 @@ export default function Login() {
         <Card className="border shadow-sm">
           <CardHeader className="text-center pb-4">
             <CardTitle className="text-xl">ログイン</CardTitle>
-            <CardDescription>アカウント情報を入力してください</CardDescription>
+            <CardDescription>ユーザーIDとパスワードを入力してください</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="email">メールアドレス</Label>
+                <Label htmlFor="loginId">ユーザーID</Label>
                 <Input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@example.com"
+                  id="loginId"
+                  type="text"
+                  value={loginId}
+                  onChange={(e) => setLoginId(e.target.value)}
+                  placeholder="user123"
                   required
-                  autoComplete="email"
+                  autoComplete="username"
+                  autoFocus
                 />
               </div>
               <div className="space-y-2">

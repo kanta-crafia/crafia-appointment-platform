@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
-import { supabase, type User, type UserRole } from '@/lib/supabase';
+import { supabase, type User } from '@/lib/supabase';
 import type { Session } from '@supabase/supabase-js';
 
 interface AuthState {
@@ -12,7 +12,7 @@ interface AuthState {
 }
 
 interface AuthContextType extends AuthState {
-  signIn: (email: string, password: string) => Promise<{ error: string | null }>;
+  signIn: (loginId: string, password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
   refreshUser: () => Promise<void>;
 }
@@ -73,9 +73,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe();
   }, [fetchUser, updateState]);
 
-  const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return { error: error?.message || null };
+  const signIn = async (loginId: string, password: string) => {
+    // Step 1: カスタムログインRPCでユーザーを検証
+    const { data: loginResult, error: rpcError } = await supabase.rpc('custom_login', {
+      p_login_id: loginId,
+      p_password: password,
+    });
+
+    if (rpcError) {
+      return { error: 'ログインに失敗しました: ' + rpcError.message };
+    }
+
+    if (loginResult?.error) {
+      return { error: loginResult.error };
+    }
+
+    if (!loginResult?.success) {
+      return { error: 'ユーザーIDまたはパスワードが正しくありません' };
+    }
+
+    // Step 2: Supabase Authでサインイン（emailベースで内部的に認証）
+    const email = loginResult.email || loginId + '@crafia.local';
+    const { error: authError } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (authError) {
+      return { error: 'ログインに失敗しました: ' + authError.message };
+    }
+
+    return { error: null };
   };
 
   const signOut = async () => {

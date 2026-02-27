@@ -107,7 +107,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <div className="border-t border-sidebar-border px-3 py-3">
         {!collapsed && user && (
           <div className="mb-2 px-1">
-            <p className="text-xs font-medium text-sidebar-foreground truncate">{user.full_name || user.email}</p>
+            <p className="text-xs font-medium text-sidebar-foreground truncate">{user.full_name || user.login_id || user.email}</p>
             <p className="text-xs text-sidebar-foreground/50 capitalize">{user.role?.replace('_', ' ')}</p>
           </div>
         )}
