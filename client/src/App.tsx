@@ -15,6 +15,7 @@ import Projects from "./pages/admin/Projects";
 import Allocations from "./pages/admin/Allocations";
 import Approvals from "./pages/admin/Approvals";
 import AuditLogs from "./pages/admin/AuditLogs";
+import AgencyStats from "./pages/admin/AgencyStats";
 
 // Partner pages
 import PartnerDashboard from "./pages/partner/PartnerDashboard";
@@ -38,6 +39,7 @@ function AuthenticatedRoutes() {
           <Route path="/allocations" component={Allocations} />
           <Route path="/approvals" component={Approvals} />
           <Route path="/notifications" component={Notifications} />
+          <Route path="/agency-stats" component={AgencyStats} />
           <Route path="/audit-logs" component={AuditLogs} />
           <Route component={NotFound} />
         </Switch>

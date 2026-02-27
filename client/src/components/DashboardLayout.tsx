@@ -3,7 +3,7 @@ import { Link, useLocation } from 'wouter';
 import { cn } from '@/lib/utils';
 import {
   Building2, LayoutDashboard, Briefcase, GitBranch, ClipboardCheck,
-  Bell, LogOut, ChevronLeft, ChevronRight, FileText, BarChart3, Menu
+  Bell, LogOut, ChevronLeft, ChevronRight, FileText, BarChart3, Menu, PieChart
 } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
@@ -47,6 +47,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { label: '案件管理', href: '/projects', icon: Briefcase, adminOnly: true },
     { label: '割り当て管理', href: '/allocations', icon: GitBranch, adminOnly: true },
     { label: 'アポ承認', href: '/approvals', icon: ClipboardCheck, adminOnly: true },
+    { label: '代理店別集計', href: '/agency-stats', icon: PieChart, adminOnly: true },
     { label: '通知', href: '/notifications', icon: Bell, badge: unreadCount },
     { label: '監査ログ', href: '/audit-logs', icon: FileText, adminOnly: true },
   ];

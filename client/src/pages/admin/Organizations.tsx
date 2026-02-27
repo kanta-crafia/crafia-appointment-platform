@@ -27,6 +27,8 @@ export default function Organizations() {
   const [showUserEditDialog, setShowUserEditDialog] = useState(false);
   const [showResetPwDialog, setShowResetPwDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showDeleteOrgDialog, setShowDeleteOrgDialog] = useState(false);
+  const [deleteOrg, setDeleteOrg] = useState<Organization | null>(null);
 
   const [editOrg, setEditOrg] = useState<Organization | null>(null);
   const [editUser, setEditUser] = useState<User | null>(null);
@@ -213,6 +215,34 @@ export default function Organizations() {
     setNewPassword('');
   };
 
+  // === Org Delete ===
+  const handleDeleteOrg = async () => {
+    if (!deleteOrg) return;
+    // Check if org has users
+    const orgUsers = users.filter(u => u.org_id === deleteOrg.id);
+    if (orgUsers.length > 0) {
+      toast.error('この企業にはユーザーが紐づいているため削除できません', { description: `${orgUsers.length}名のユーザーを先に削除または移動してください` });
+      setShowDeleteOrgDialog(false);
+      return;
+    }
+    setSaving(true);
+    const { error } = await supabase.from('organizations').delete().eq('id', deleteOrg.id);
+    setSaving(false);
+    if (error) {
+      toast.error('削除に失敗しました', { description: error.message });
+    } else {
+      toast.success('企業を削除しました');
+    }
+    setShowDeleteOrgDialog(false);
+    setDeleteOrg(null);
+    fetchOrgs();
+  };
+
+  const openDeleteOrg = (org: Organization) => {
+    setDeleteOrg(org);
+    setShowDeleteOrgDialog(true);
+  };
+
   // === Open helpers ===
   const openCreateOrg = () => {
     setEditOrg(null);
@@ -319,6 +349,11 @@ export default function Organizations() {
                           <Button variant="ghost" size="sm" onClick={() => openCreateUser(org.id)} title="ユーザー追加">
                             <UserPlus className="w-3.5 h-3.5" />
                           </Button>
+                          {!org.parent_org_id ? null : (
+                            <Button variant="ghost" size="sm" onClick={() => openDeleteOrg(org)} title="削除" className="text-destructive hover:text-destructive">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -627,6 +662,32 @@ export default function Organizations() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* === Delete Org Confirmation === */}
+      <AlertDialog open={showDeleteOrgDialog} onOpenChange={setShowDeleteOrgDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>企業を削除しますか？</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteOrg && (
+                <>
+                  <strong>{deleteOrg.name}</strong>を削除します。
+                  この操作は取り消せません。紐づくユーザーがいる場合は削除できません。
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>キャンセル</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteOrg}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {saving ? '削除中...' : '削除する'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* === Delete User Confirmation === */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
