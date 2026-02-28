@@ -20,6 +20,7 @@ export type AllocationStatus = 'active' | 'inactive';
 export type AppointmentStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
 export type OrgStatus = 'active' | 'inactive';
 export type Priority = 'high' | 'normal' | 'low';
+export type SnsAccountStatus = 'available' | 'assigned' | 'suspended';
 
 export interface Organization {
   id: string;
@@ -107,6 +108,22 @@ export interface Notification {
   payload_json: Record<string, unknown> | null;
   is_read: boolean;
   created_at: string;
+}
+
+export interface SnsAccount {
+  id: string;
+  platform: string;
+  account_name: string;
+  login_id: string;
+  login_password: string;
+  assigned_user_id: string | null;
+  assigned_at: string | null;
+  notes: string | null;
+  status: SnsAccountStatus;
+  created_at: string;
+  updated_at: string;
+  // Joined fields
+  assigned_user?: User;
 }
 
 export interface AuditLog {

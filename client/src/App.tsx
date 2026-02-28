@@ -16,6 +16,7 @@ import Allocations from "./pages/admin/Allocations";
 import Approvals from "./pages/admin/Approvals";
 import AuditLogs from "./pages/admin/AuditLogs";
 import AgencyStats from "./pages/admin/AgencyStats";
+import SnsAccounts from "./pages/admin/SnsAccounts";
 // Partner pages
 import PartnerDashboard from "./pages/partner/PartnerDashboard";
 import MyAllocations from "./pages/partner/MyAllocations";
@@ -39,6 +40,7 @@ function AuthenticatedRoutes() {
           <Route path="/approvals" component={Approvals} />
           <Route path="/notifications" component={Notifications} />
           <Route path="/agency-stats" component={AgencyStats} />
+          <Route path="/sns-accounts" component={SnsAccounts} />
           <Route path="/audit-logs" component={AuditLogs} />
           <Route component={NotFound} />
         </Switch>

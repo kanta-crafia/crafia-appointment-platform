@@ -15,4 +15,14 @@
 - [x] メール送信機能の実装（server/email.ts, server/emailRoutes.ts）
 - [x] アポ登録フローにメール送信を組み込む（NewAppointment.tsx）
 - [x] テスト・動作確認（vitest + API テスト成功）
+- [x] GitHub push・Vercel再デプロイ
+
+## Facebookアカウント貸出管理
+- [x] Supabaseにsns_accountsテーブルを作成（ID/PW/アカウント名/貸出先/ステータス）
+- [x] 管理者向けアカウント一覧画面の実装
+- [x] アカウント新規登録機能の実装
+- [x] アカウント編集・削除機能の実装
+- [x] パートナーへの貸出割り当て・解除機能の実装
+- [x] サイドバーにメニュー追加
+- [ ] テスト・動作確認
 - [ ] GitHub push・Vercel再デプロイ

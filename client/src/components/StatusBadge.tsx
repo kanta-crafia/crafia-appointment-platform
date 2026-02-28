@@ -8,6 +8,9 @@ const statusConfig: Record<string, { label: string; className: string }> = {
   active: { label: '有効', className: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
   inactive: { label: '無効', className: 'bg-gray-100 text-gray-600 border-gray-200' },
   closed: { label: '終了', className: 'bg-slate-100 text-slate-700 border-slate-200' },
+  available: { label: '空き', className: 'bg-blue-100 text-blue-800 border-blue-200' },
+  assigned: { label: '貸出中', className: 'bg-purple-100 text-purple-800 border-purple-200' },
+  suspended: { label: '停止中', className: 'bg-orange-100 text-orange-800 border-orange-200' },
 };
 
 export function StatusBadge({ status, className }: { status: string; className?: string }) {
@@ -27,6 +30,9 @@ export function StatusBadge({ status, className }: { status: string; className?:
         status === 'active' && 'bg-emerald-500',
         status === 'inactive' && 'bg-gray-400',
         status === 'closed' && 'bg-slate-500',
+        status === 'available' && 'bg-blue-500',
+        status === 'assigned' && 'bg-purple-500',
+        status === 'suspended' && 'bg-orange-500',
       )} />
       {config.label}
     </span>
