@@ -16,7 +16,6 @@ import Allocations from "./pages/admin/Allocations";
 import Approvals from "./pages/admin/Approvals";
 import AuditLogs from "./pages/admin/AuditLogs";
 import AgencyStats from "./pages/admin/AgencyStats";
-
 // Partner pages
 import PartnerDashboard from "./pages/partner/PartnerDashboard";
 import MyAllocations from "./pages/partner/MyAllocations";
@@ -83,6 +82,7 @@ function AppRouter() {
     );
   }
 
+  // make sure to consider if you need authentication for certain routes
   return (
     <Switch>
       <Route path="/login">

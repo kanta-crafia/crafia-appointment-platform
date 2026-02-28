@@ -10,4 +10,9 @@
 - [ ] ユーザー一覧: 削除ボタンが表示されるよう修正
 
 ## メール通知
-- [ ] アポ獲得時にCrafia本部へメール通知を送信
+- [x] 現状のアポ登録フロー（NewAppointment.tsx）を確認
+- [x] メール送信方法の選定 → Gmail + Nodemailer
+- [x] メール送信機能の実装（server/email.ts, server/emailRoutes.ts）
+- [x] アポ登録フローにメール送信を組み込む（NewAppointment.tsx）
+- [x] テスト・動作確認（vitest + API テスト成功）
+- [ ] GitHub push・Vercel再デプロイ

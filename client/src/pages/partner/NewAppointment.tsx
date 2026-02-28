@@ -49,6 +49,48 @@ export default function NewAppointment() {
   const selectedAlloc = allocations.find(a => a.id === allocationId);
   const selectedProject = selectedAlloc ? (selectedAlloc as any).project : null;
 
+  // パートナー組織名を取得する
+  const getPartnerOrgName = useCallback(async (): Promise<string> => {
+    if (!user?.org_id) return user?.full_name || 'パートナー';
+    try {
+      const { data } = await supabase
+        .from('organizations')
+        .select('name')
+        .eq('id', user.org_id)
+        .single();
+      return data?.name || user?.full_name || 'パートナー';
+    } catch {
+      return user?.full_name || 'パートナー';
+    }
+  }, [user]);
+
+  // メール通知を送信する
+  const sendEmailNotification = async (projectTitle: string) => {
+    try {
+      const partnerName = await getPartnerOrgName();
+      const response = await fetch('/api/email/appointment-notification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          partnerName,
+          projectTitle,
+          targetCompany,
+          contactPerson: contactPerson || null,
+          meetingDatetime,
+          notes: notes || null,
+          evidenceUrl: evidenceUrl || null,
+        }),
+      });
+      const result = await response.json();
+      if (!result.success) {
+        console.warn('[Email] 通知送信失敗:', result.error);
+      }
+    } catch (error) {
+      // メール送信失敗はアポ登録自体には影響させない
+      console.warn('[Email] 通知送信エラー:', error);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!allocationId || !targetCompany || !meetingDatetime) {
@@ -87,6 +129,10 @@ export default function NewAppointment() {
     if (error) {
       toast.error('登録に失敗しました', { description: error.message });
     } else {
+      // アポ登録成功後にメール通知を送信（バックグラウンド）
+      const projectTitle = selectedProject?.title || '不明な案件';
+      sendEmailNotification(projectTitle);
+
       toast.success('アポイントを登録しました', { description: '承認待ちの状態です' });
       navigate('/appointments');
     }
