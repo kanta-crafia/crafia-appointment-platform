@@ -32,4 +32,6 @@
   - 原因: admin_create_user関数でauth.usersにINSERT時、recovery_token/email_change/email_change_token_newがNULLのまま
   - 修正1: userAのauth.usersレコードのNULLカラムを空文字列に更新
   - 修正2: admin_create_user関数を修正し、全トークンカラムに空文字列を設定するよう変更
-- [ ] リロード時に無限ローディングになる問題を修正（キャッシュクリアで復帰する）
+- [x] リロード時に無限ローディングになる問題を修正（キャッシュクリアで復帰する）
+  - 原因: supabase-js v2のWeb Locks API (navigator.locks) がリロード時にデッドロック
+  - 修正: AuthContextでlocalStorageからの即時セッション読み取りを追加し、getSession()のハングを回避
