@@ -38,3 +38,7 @@
 - [x] アポ承認時のエラーを修正
   - 原因: appointmentsテーブルにupdated_atカラムが存在しないのに、approve/reject/cancel関数が参照していた
   - 修正: appointmentsテーブルにupdated_atカラムを追加
+- [x] approve_appointment関数のシグネチャ不一致エラーを修正（フロントが2引数で呼び出し、DB関数は1引数）
+  - approve_appointment: (p_appointment_id, p_approver_id) に修正、approved_by/approved_atも設定
+  - reject_appointment: (p_appointment_id, p_approver_id, p_reason) に修正
+  - cancel_appointment: (p_appointment_id, p_reason) に修正
