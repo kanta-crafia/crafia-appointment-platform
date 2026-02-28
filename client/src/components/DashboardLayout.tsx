@@ -27,12 +27,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const fetchUnread = useCallback(async () => {
     if (!user) return;
-    const { count } = await supabase
-      .from('notifications')
-      .select('*', { count: 'exact', head: true })
-      .eq('recipient_user_id', user.id)
-      .eq('is_read', false);
-    setUnreadCount(count || 0);
+    try {
+      const { count } = await supabase
+        .from('notifications')
+        .select('*', { count: 'exact', head: true })
+        .eq('recipient_user_id', user.id)
+        .eq('is_read', false);
+      setUnreadCount(count || 0);
+    } catch (e) {
+      console.error('Notification count fetch error:', e);
+    }
   }, [user]);
 
   useEffect(() => {

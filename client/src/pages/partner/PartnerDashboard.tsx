@@ -12,15 +12,23 @@ export default function PartnerDashboard() {
   const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
-    if (!user) return;
+    if (!user) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
-    const [allocRes, apptRes] = await Promise.all([
-      supabase.from('allocations').select('*, project:projects(*)').eq('child_org_id', user.org_id).eq('status', 'active'),
-      supabase.from('appointments').select('*').eq('org_id', user.org_id),
-    ]);
-    setAllocations(allocRes.data || []);
-    setAppointments(apptRes.data || []);
-    setLoading(false);
+    try {
+      const [allocRes, apptRes] = await Promise.all([
+        supabase.from('allocations').select('*, project:projects(*)').eq('child_org_id', user.org_id).eq('status', 'active'),
+        supabase.from('appointments').select('*').eq('org_id', user.org_id),
+      ]);
+      setAllocations(allocRes.data || []);
+      setAppointments(apptRes.data || []);
+    } catch (e) {
+      console.error('Dashboard data fetch error:', e);
+    } finally {
+      setLoading(false);
+    }
   }, [user]);
 
   useEffect(() => { fetchData(); }, [fetchData]);

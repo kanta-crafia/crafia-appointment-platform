@@ -25,26 +25,31 @@ export default function AdminDashboard() {
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const [projRes, apptRes, orgRes, pendingRes, approvedRes, recentRes] = await Promise.all([
-      supabase.from('projects').select('*'),
-      supabase.from('appointments').select('*', { count: 'exact', head: true }),
-      supabase.from('organizations').select('*', { count: 'exact', head: true }),
-      supabase.from('appointments').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
-      supabase.from('appointments').select('*', { count: 'exact', head: true }).eq('status', 'approved'),
-      supabase.from('appointments').select('*, project:projects(title), organization:organizations(name)').order('created_at', { ascending: false }).limit(5),
-    ]);
+    try {
+      const [projRes, apptRes, orgRes, pendingRes, approvedRes, recentRes] = await Promise.all([
+        supabase.from('projects').select('*'),
+        supabase.from('appointments').select('*', { count: 'exact', head: true }),
+        supabase.from('organizations').select('*', { count: 'exact', head: true }),
+        supabase.from('appointments').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
+        supabase.from('appointments').select('*', { count: 'exact', head: true }).eq('status', 'approved'),
+        supabase.from('appointments').select('*, project:projects(title), organization:organizations(name)').order('created_at', { ascending: false }).limit(5),
+      ]);
 
-    setProjects(projRes.data || []);
-    setRecentAppts(recentRes.data || []);
-    setStats({
-      totalProjects: projRes.data?.length || 0,
-      activeProjects: projRes.data?.filter(p => p.status === 'active').length || 0,
-      totalAppointments: apptRes.count || 0,
-      pendingAppointments: pendingRes.count || 0,
-      approvedAppointments: approvedRes.count || 0,
-      totalOrgs: orgRes.count || 0,
-    });
-    setLoading(false);
+      setProjects(projRes.data || []);
+      setRecentAppts(recentRes.data || []);
+      setStats({
+        totalProjects: projRes.data?.length || 0,
+        activeProjects: projRes.data?.filter(p => p.status === 'active').length || 0,
+        totalAppointments: apptRes.count || 0,
+        pendingAppointments: pendingRes.count || 0,
+        approvedAppointments: approvedRes.count || 0,
+        totalOrgs: orgRes.count || 0,
+      });
+    } catch (e) {
+      console.error('Admin dashboard data fetch error:', e);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
