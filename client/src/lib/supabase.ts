@@ -3,6 +3,21 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
+/**
+ * Custom no-op lock function to bypass Web Locks API.
+ * The Web Locks API (navigator.locks) in Supabase Auth JS v2 causes deadlocks
+ * on page reload and during signInWithPassword, making the app hang indefinitely.
+ * By providing a custom lock function that simply executes the callback directly,
+ * we avoid the deadlock while maintaining all other functionality.
+ */
+async function noOpLock<R>(
+  _name: string,
+  _acquireTimeout: number,
+  fn: () => Promise<R>
+): Promise<R> {
+  return await fn();
+}
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     storageKey: 'crafia-auth',
@@ -10,6 +25,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     persistSession: true,
     detectSessionInUrl: false,
     flowType: 'implicit',
+    lock: noOpLock,
   },
 });
 
