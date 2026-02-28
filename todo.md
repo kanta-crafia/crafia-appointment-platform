@@ -35,3 +35,6 @@
 - [x] リロード時に無限ローディングになる問題を修正（キャッシュクリアで復帰する）
   - 原因: supabase-js v2のWeb Locks API (navigator.locks) がリロード時にデッドロック
   - 修正: AuthContextでlocalStorageからの即時セッション読み取りを追加し、getSession()のハングを回避
+- [x] アポ承認時のエラーを修正
+  - 原因: appointmentsテーブルにupdated_atカラムが存在しないのに、approve/reject/cancel関数が参照していた
+  - 修正: appointmentsテーブルにupdated_atカラムを追加
