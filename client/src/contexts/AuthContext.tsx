@@ -1,5 +1,5 @@
-import { createContext, useContext, useEffect, useState, useCallback, useRef, type ReactNode } from 'react';
-import { supabase, type User } from '@/lib/supabase';
+import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
+import { supabase, getSessionFromStorage, type User } from '@/lib/supabase';
 import type { Session } from '@supabase/supabase-js';
 
 interface AuthState {
@@ -29,8 +29,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isSubPartner: false,
   });
 
-  const initialized = useRef(false);
-
   const fetchUser = useCallback(async (userId: string) => {
     try {
       const { data, error } = await supabase
@@ -58,44 +56,93 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (initialized.current) return;
-    initialized.current = true;
+    let cancelled = false;
 
-    // Timeout to prevent infinite loading if getSession hangs
-    const timeout = setTimeout(() => {
+    const initAuth = async () => {
+      // Strategy: Use a race between getSession() and a fast localStorage fallback.
+      // supabase-js v2 uses Web Locks API (navigator.locks) which can deadlock
+      // on page reload due to orphaned locks. getSession() may hang for 5-10+ seconds.
+      // We use localStorage as an immediate fallback to show the UI quickly,
+      // then let getSession() update the state when it eventually resolves.
+
+      const storedSession = getSessionFromStorage();
+
+      // If we have a stored session, immediately fetch user data and show UI
+      // This avoids waiting for getSession() which may be blocked by Web Locks
+      if (storedSession) {
+        const user = await fetchUser(storedSession.userId);
+        if (!cancelled && user) {
+          // Show the UI immediately with the stored session info
+          // We pass null for session since we don't have the full Session object,
+          // but the user data is enough to render the dashboard
+          setState({
+            session: null, // Will be updated when getSession() resolves
+            user,
+            loading: false,
+            isAdmin: user.role === 'admin',
+            isPartner: user.role === 'partner',
+            isSubPartner: user.role === 'sub_partner',
+          });
+        }
+      }
+
+      // Also start getSession() in the background - it will update with the real session
+      // when the Web Lock is eventually acquired (or times out and force-acquires)
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (cancelled) return;
+
+        if (session?.user) {
+          const user = await fetchUser(session.user.id);
+          if (!cancelled) {
+            updateState(session, user);
+          }
+        } else if (!storedSession) {
+          // Only set to logged-out if we didn't have a stored session either
+          if (!cancelled) {
+            updateState(null, null);
+          }
+        }
+      } catch {
+        // getSession() failed - if we already showed UI from localStorage, keep it
+        if (!cancelled && !storedSession) {
+          updateState(null, null);
+        }
+      }
+    };
+
+    // Safety timeout: if everything hangs for 15 seconds, force loading to false
+    const safetyTimeout = setTimeout(() => {
       setState(prev => {
         if (prev.loading) {
           return { ...prev, loading: false };
         }
         return prev;
       });
-    }, 5000);
+    }, 15000);
 
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      clearTimeout(timeout);
-      if (session?.user) {
-        const user = await fetchUser(session.user.id);
-        updateState(session, user);
-      } else {
-        updateState(null, null);
-      }
-    }).catch(() => {
-      clearTimeout(timeout);
-      updateState(null, null);
-    });
+    initAuth();
 
+    // Listen for auth state changes (login, logout, token refresh)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      clearTimeout(timeout);
+      if (cancelled) return;
+      clearTimeout(safetyTimeout);
+
       if (session?.user) {
         const user = await fetchUser(session.user.id);
-        updateState(session, user);
+        if (!cancelled) {
+          updateState(session, user);
+        }
       } else {
-        updateState(null, null);
+        if (!cancelled) {
+          updateState(null, null);
+        }
       }
     });
 
     return () => {
-      clearTimeout(timeout);
+      cancelled = true;
+      clearTimeout(safetyTimeout);
       subscription.unsubscribe();
     };
   }, [fetchUser, updateState]);
@@ -139,6 +186,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
+    // Clear localStorage first to prevent stale session on next load
+    try {
+      localStorage.removeItem('crafia-auth');
+    } catch {
+      // Ignore localStorage errors
+    }
     await supabase.auth.signOut();
     updateState(null, null);
   };

@@ -26,3 +26,10 @@
 - [x] サイドバーにメニュー追加
 - [ ] テスト・動作確認
 - [ ] GitHub push・Vercel再デプロイ
+
+## バグ修正
+- [x] パートナーアカウントでログイン時「Database error querying schema」エラーを修正
+  - 原因: admin_create_user関数でauth.usersにINSERT時、recovery_token/email_change/email_change_token_newがNULLのまま
+  - 修正1: userAのauth.usersレコードのNULLカラムを空文字列に更新
+  - 修正2: admin_create_user関数を修正し、全トークンカラムに空文字列を設定するよう変更
+- [ ] リロード時に無限ローディングになる問題を修正（キャッシュクリアで復帰する）
