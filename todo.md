@@ -42,4 +42,8 @@
   - approve_appointment: (p_appointment_id, p_approver_id) に修正、approved_by/approved_atも設定
   - reject_appointment: (p_appointment_id, p_approver_id, p_reason) に修正
   - cancel_appointment: (p_appointment_id, p_reason) に修正
-- [ ] リロード時の無限ローディング問題を確実に解消する（前回の修正では不十分）
+- [x] リロード時の無限ローディング問題を確実に解消する（前回の修正では不十分）
+  - 根本原因: Supabase Auth JS v2のWeb Locks API (navigator.locks) がsignInWithPasswordとgetSessionの両方でデッドロック
+  - 修正: supabase.tsにnoOpLock関数を追加してWeb Locksを完全にバイパス
+  - AuthContextをシンプルなgetSession()ベースの実装に簡素化
+  - ログイン・リロード両方が本番環境で正常動作を確認
