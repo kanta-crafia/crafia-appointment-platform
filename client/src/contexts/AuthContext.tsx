@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback, useRef, type ReactNode } from 'react';
 import { supabase, type User } from '@/lib/supabase';
 import type { Session } from '@supabase/supabase-js';
 
@@ -78,18 +78,21 @@ function readStoredSession(): {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<AuthState>(() => {
-    // Synchronous initial state: check localStorage immediately
-    // to avoid even a single frame of loading state if possible
-    return {
-      session: null,
-      user: null,
-      loading: true,
-      isAdmin: false,
-      isPartner: false,
-      isSubPartner: false,
-    };
+  const [state, setState] = useState<AuthState>({
+    session: null,
+    user: null,
+    loading: true,
+    isAdmin: false,
+    isPartner: false,
+    isSubPartner: false,
   });
+
+  // Track whether initAuth has successfully restored a user from localStorage.
+  // When true, onAuthStateChange should NOT reset user to null on INITIAL_SESSION.
+  const initAuthRestoredRef = useRef(false);
+
+  // Track whether initAuth has completed its work
+  const initAuthDoneRef = useRef(false);
 
   const fetchUserViaClient = useCallback(async (userId: string) => {
     try {
@@ -105,17 +108,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const updateState = useCallback((session: Session | null, user: User | null) => {
-    setState({
-      session,
-      user,
-      loading: false,
-      isAdmin: user?.role === 'admin',
-      isPartner: user?.role === 'partner',
-      isSubPartner: user?.role === 'sub_partner',
-    });
-  }, []);
-
   useEffect(() => {
     let cancelled = false;
 
@@ -126,8 +118,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const stored = readStoredSession();
 
       if (stored) {
-        // PHASE 1: Immediately fetch user data using the stored access token
-        // via direct REST API call (no dependency on supabase client session)
+        // Fetch user data using the stored access token via direct REST API call
         const user = await fetchUserDirect(
           stored.userId,
           stored.accessToken,
@@ -138,7 +129,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (cancelled) return;
 
         if (user) {
-          // Show UI immediately - don't wait for supabase client initialization
+          // Mark that we successfully restored a user from localStorage
+          initAuthRestoredRef.current = true;
+
+          // Show UI immediately
           setState({
             session: null,
             user,
@@ -148,72 +142,95 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             isSubPartner: user.role === 'sub_partner',
           });
 
-          // PHASE 2: Initialize supabase client session in background using setSession()
-          // setSession() does NOT use Web Locks, unlike getSession()
+          // Initialize supabase client session in background
           try {
             const { data } = await supabase.auth.setSession({
               access_token: stored.accessToken,
               refresh_token: stored.refreshToken,
             });
             if (!cancelled && data.session) {
-              // Update with the real session object
               setState(prev => ({
                 ...prev,
                 session: data.session,
               }));
             }
           } catch {
-            // setSession failed - but UI is already showing, so this is non-critical
-            // The user can continue using the app; next action requiring auth will redirect to login
+            // Non-critical - UI is already showing
           }
+
+          initAuthDoneRef.current = true;
           return;
         }
-        // If fetchUserDirect failed (e.g., token invalid), fall through to getSession()
       }
 
       // No stored session or stored session was invalid
-      // Fall back to getSession() with a timeout
-      try {
-        const getSessionPromise = supabase.auth.getSession();
-        const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000));
-
-        const result = await Promise.race([getSessionPromise, timeoutPromise]);
-
-        if (cancelled) return;
-
-        if (result && 'data' in result && result.data.session?.user) {
-          const session = result.data.session;
-          const user = await fetchUserViaClient(session.user.id);
-          if (!cancelled) {
-            updateState(session, user);
-          }
-        } else {
-          // No session or timed out - user is not logged in
-          if (!cancelled) {
-            updateState(null, null);
-          }
-        }
-      } catch {
-        if (!cancelled) {
-          updateState(null, null);
-        }
+      // Don't even try getSession() - it deadlocks with Web Locks.
+      // If there's no valid stored session, the user is simply not logged in.
+      if (!cancelled) {
+        setState({
+          session: null,
+          user: null,
+          loading: false,
+          isAdmin: false,
+          isPartner: false,
+          isSubPartner: false,
+        });
       }
+
+      initAuthDoneRef.current = true;
     };
 
     initAuth();
 
     // Listen for auth state changes (login, logout, token refresh)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (cancelled) return;
 
+      // CRITICAL: If initAuth successfully restored a user from localStorage,
+      // ignore INITIAL_SESSION events with null session.
+      // This prevents the Supabase client's Web Locks issue from resetting our state.
+      if (event === 'INITIAL_SESSION' && !session && initAuthRestoredRef.current) {
+        return; // Skip - we already have a valid user from localStorage
+      }
+
+      // For SIGNED_OUT events, always clear the state
+      if (event === 'SIGNED_OUT') {
+        setState({
+          session: null,
+          user: null,
+          loading: false,
+          isAdmin: false,
+          isPartner: false,
+          isSubPartner: false,
+        });
+        return;
+      }
+
+      // For events with a valid session, update the state
       if (session?.user) {
         const user = await fetchUserViaClient(session.user.id);
         if (!cancelled) {
-          updateState(session, user);
+          setState({
+            session,
+            user,
+            loading: false,
+            isAdmin: user?.role === 'admin' || false,
+            isPartner: user?.role === 'partner' || false,
+            isSubPartner: user?.role === 'sub_partner' || false,
+          });
         }
-      } else {
-        if (!cancelled) {
-          updateState(null, null);
+      } else if (event !== 'INITIAL_SESSION') {
+        // For non-INITIAL_SESSION events with no session, only clear if initAuth is done
+        // This prevents race conditions during initialization
+        if (initAuthDoneRef.current && !initAuthRestoredRef.current) {
+          setState({
+            session: null,
+            user: null,
+            loading: false,
+            isAdmin: false,
+            isPartner: false,
+            isSubPartner: false,
+          });
         }
       }
     });
@@ -222,7 +239,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       cancelled = true;
       subscription.unsubscribe();
     };
-  }, [fetchUserViaClient, updateState]);
+  }, [fetchUserViaClient]);
 
   const signIn = async (loginId: string, password: string) => {
     try {
@@ -244,7 +261,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { error: 'ユーザーIDまたはパスワードが正しくありません' };
       }
 
-      // Step 2: Supabase Authでサインイン（emailベースで内部的に認証）
+      // Step 2: Supabase Authでサインイン
       const email = loginResult.email || loginId + '@crafia.local';
       const { error: authError } = await supabase.auth.signInWithPassword({
         email,
@@ -254,6 +271,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (authError) {
         return { error: 'ログインに失敗しました: ' + authError.message };
       }
+
+      // Reset the restored flag since we have a fresh login
+      initAuthRestoredRef.current = false;
 
       return { error: null };
     } catch (e: unknown) {
@@ -269,15 +289,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {
       // Ignore localStorage errors
     }
+    // Reset the restored flag
+    initAuthRestoredRef.current = false;
     await supabase.auth.signOut();
-    updateState(null, null);
+    setState({
+      session: null,
+      user: null,
+      loading: false,
+      isAdmin: false,
+      isPartner: false,
+      isSubPartner: false,
+    });
   };
 
   const refreshUser = async () => {
     const userId = state.user?.id || state.session?.user?.id;
     if (userId) {
       const user = await fetchUserViaClient(userId);
-      updateState(state.session, user);
+      setState(prev => ({
+        ...prev,
+        user,
+        isAdmin: user?.role === 'admin' || false,
+        isPartner: user?.role === 'partner' || false,
+        isSubPartner: user?.role === 'sub_partner' || false,
+      }));
     }
   };
 
