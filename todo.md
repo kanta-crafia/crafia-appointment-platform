@@ -42,3 +42,4 @@
   - approve_appointment: (p_appointment_id, p_approver_id) に修正、approved_by/approved_atも設定
   - reject_appointment: (p_appointment_id, p_approver_id, p_reason) に修正
   - cancel_appointment: (p_appointment_id, p_reason) に修正
+- [ ] リロード時の無限ローディング問題を確実に解消する（前回の修正では不十分）

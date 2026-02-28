@@ -13,28 +13,6 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   },
 });
 
-/**
- * Read session directly from localStorage to bypass Web Locks API deadlock.
- * supabase-js v2 uses navigator.locks which can cause orphaned locks on reload,
- * making getSession() hang for 5+ seconds. This function provides an immediate fallback.
- */
-export function getSessionFromStorage(): { accessToken: string; userId: string } | null {
-  try {
-    const raw = localStorage.getItem('crafia-auth');
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    const accessToken = parsed?.access_token;
-    const userId = parsed?.user?.id;
-    const expiresAt = parsed?.expires_at;
-    if (!accessToken || !userId) return null;
-    // Check if token is expired
-    if (expiresAt && Date.now() / 1000 > expiresAt) return null;
-    return { accessToken, userId };
-  } catch {
-    return null;
-  }
-}
-
 // Types based on our DB schema
 export type UserRole = 'admin' | 'partner' | 'sub_partner' | 'approver';
 export type ProjectStatus = 'active' | 'inactive' | 'closed';
