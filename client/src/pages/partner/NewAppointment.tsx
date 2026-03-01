@@ -30,7 +30,8 @@ export default function NewAppointment() {
   const [contactPerson, setContactPerson] = useState('');
   const [meetingDatetime, setMeetingDatetime] = useState('');
   const [notes, setNotes] = useState('');
-  const [evidenceUrl, setEvidenceUrl] = useState('');
+  const [acquisitionDate, setAcquisitionDate] = useState('');
+  const [acquirerName, setAcquirerName] = useState('');
 
   const fetchAllocations = useCallback(async () => {
     if (!user) return;
@@ -45,6 +46,13 @@ export default function NewAppointment() {
   }, [user]);
 
   useEffect(() => { fetchAllocations(); }, [fetchAllocations]);
+
+  // ユーザー名を獲得者名のデフォルトに設定
+  useEffect(() => {
+    if (user?.full_name && !acquirerName) {
+      setAcquirerName(user.full_name);
+    }
+  }, [user]);
 
   const selectedAlloc = allocations.find(a => a.id === allocationId);
   const selectedProject = selectedAlloc ? (selectedAlloc as any).project : null;
@@ -79,7 +87,8 @@ export default function NewAppointment() {
           contactPerson: contactPerson || null,
           meetingDatetime,
           notes: notes || null,
-          evidenceUrl: evidenceUrl || null,
+          acquisitionDate: acquisitionDate || null,
+          acquirerName: acquirerName || null,
         }),
       });
       const result = await response.json();
@@ -122,7 +131,8 @@ export default function NewAppointment() {
       contact_person: contactPerson || null,
       meeting_datetime: meetingDatetime,
       notes: notes || null,
-      evidence_url: evidenceUrl || null,
+      acquisition_date: acquisitionDate || null,
+      acquirer_name: acquirerName || null,
       status: 'pending',
     });
 
@@ -189,12 +199,12 @@ export default function NewAppointment() {
             </div>
 
             <div className="space-y-2">
-              <Label>対象企業名 <span className="text-destructive">*</span></Label>
+              <Label>先方企業名 <span className="text-destructive">*</span></Label>
               <Input value={targetCompany} onChange={(e) => setTargetCompany(e.target.value)} placeholder="株式会社〇〇" required />
             </div>
 
             <div className="space-y-2">
-              <Label>担当者名</Label>
+              <Label>先方担当者名</Label>
               <Input value={contactPerson} onChange={(e) => setContactPerson(e.target.value)} placeholder="山田 太郎" />
             </div>
 
@@ -203,14 +213,20 @@ export default function NewAppointment() {
               <Input type="datetime-local" value={meetingDatetime} onChange={(e) => setMeetingDatetime(e.target.value)} required />
             </div>
 
-            <div className="space-y-2">
-              <Label>メモ</Label>
-              <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="補足情報があれば記入" rows={3} />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>獲得日</Label>
+                <Input type="date" value={acquisitionDate} onChange={(e) => setAcquisitionDate(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>獲得者名</Label>
+                <Input value={acquirerName} onChange={(e) => setAcquirerName(e.target.value)} placeholder="獲得者の名前" />
+              </div>
             </div>
 
             <div className="space-y-2">
-              <Label>証跡URL</Label>
-              <Input value={evidenceUrl} onChange={(e) => setEvidenceUrl(e.target.value)} placeholder="https://..." />
+              <Label>メモ</Label>
+              <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="補足情報があれば記入" rows={3} />
             </div>
 
             <div className="flex gap-3 pt-2">

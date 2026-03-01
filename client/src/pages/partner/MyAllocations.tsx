@@ -1,18 +1,21 @@
 import { useEffect, useState, useCallback } from 'react';
-import { supabase, type Allocation } from '@/lib/supabase';
+import { supabase, type Allocation, type Project } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { PageHeader } from '@/components/PageHeader';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Link } from 'wouter';
-import { ClipboardCheck, Infinity } from 'lucide-react';
+import { ClipboardCheck, Infinity, Eye, ExternalLink, Calendar, Banknote, FileText, Target, Info } from 'lucide-react';
 
 export default function MyAllocations() {
   const { user } = useAuth();
   const [allocations, setAllocations] = useState<Allocation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [detailProject, setDetailProject] = useState<Project | null>(null);
+  const [showDetail, setShowDetail] = useState(false);
 
   const fetchAllocations = useCallback(async () => {
     if (!user) return;
@@ -27,6 +30,11 @@ export default function MyAllocations() {
   }, [user]);
 
   useEffect(() => { fetchAllocations(); }, [fetchAllocations]);
+
+  const openDetail = (project: Project) => {
+    setDetailProject(project);
+    setShowDetail(true);
+  };
 
   if (loading) {
     return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>;
@@ -53,18 +61,20 @@ export default function MyAllocations() {
             </TableHeader>
             <TableBody>
               {allocations.map((a) => {
-                const project = (a as any).project;
+                const project = (a as any).project as Project | undefined;
                 const isUnlimited = project?.is_unlimited;
                 const maxTotal = project?.max_appointments_total || 0;
                 const confirmed = project?.confirmed_count || 0;
                 const remaining = isUnlimited ? null : maxTotal - confirmed;
                 const isFull = !isUnlimited && remaining !== null && remaining <= 0;
+                const isActive = a.status === 'active';
+                const projectActive = project?.status === 'active';
+                const canRegister = isActive && projectActive && !isFull;
                 return (
                   <TableRow key={a.id}>
                     <TableCell>
                       <div>
                         <p className="font-medium">{project?.title || '—'}</p>
-                        {project?.service_name && <p className="text-xs text-muted-foreground mt-0.5">{project.service_name}</p>}
                       </div>
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
@@ -81,16 +91,26 @@ export default function MyAllocations() {
                     <TableCell className="text-center">{isUnlimited ? '—' : remaining}</TableCell>
                     <TableCell><StatusBadge status={a.status} /></TableCell>
                     <TableCell className="text-right">
-                      {a.status === 'active' && !isFull && (
-                        <Link href={`/appointments/new?allocation_id=${a.id}`}>
-                          <Button size="sm" variant="outline">
-                            <ClipboardCheck className="w-3.5 h-3.5 mr-1" /> アポ登録
+                      <div className="flex items-center justify-end gap-1">
+                        {project && (
+                          <Button size="sm" variant="ghost" onClick={() => openDetail(project)} title="案件詳細">
+                            <Eye className="w-3.5 h-3.5" />
                           </Button>
-                        </Link>
-                      )}
-                      {isFull && (
-                        <span className="text-xs text-muted-foreground">上限到達</span>
-                      )}
+                        )}
+                        {canRegister ? (
+                          <Link href={`/appointments/new?allocation_id=${a.id}`}>
+                            <Button size="sm" variant="outline">
+                              <ClipboardCheck className="w-3.5 h-3.5 mr-1" /> アポ登録
+                            </Button>
+                          </Link>
+                        ) : (
+                          <>
+                            {isFull && <span className="text-xs text-muted-foreground">上限到達</span>}
+                            {!isActive && <span className="text-xs text-muted-foreground">無効</span>}
+                            {isActive && !projectActive && <span className="text-xs text-muted-foreground">案件停止中</span>}
+                          </>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 );
@@ -102,6 +122,112 @@ export default function MyAllocations() {
           </Table>
         </CardContent>
       </Card>
+
+      {/* === 案件詳細ダイアログ === */}
+      <Dialog open={showDetail} onOpenChange={setShowDetail}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="w-5 h-5" />
+              {detailProject?.title || '案件詳細'}
+            </DialogTitle>
+            <DialogDescription>案件の詳細情報</DialogDescription>
+          </DialogHeader>
+          {detailProject && (
+            <div className="space-y-5 py-2">
+              {/* 基本情報 */}
+              <div className="grid grid-cols-2 gap-4">
+                {detailProject.project_number && (
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">案件番号</p>
+                    <p className="text-sm font-mono">{detailProject.project_number}</p>
+                  </div>
+                )}
+                {detailProject.company_name && (
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">企業名</p>
+                    <p className="text-sm">{detailProject.company_name}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* 期間 */}
+              {(detailProject.start_date || detailProject.end_date) && (
+                <div className="flex items-center gap-2 text-sm">
+                  <Calendar className="w-4 h-4 text-muted-foreground" />
+                  <span>{detailProject.start_date || '—'} ~ {detailProject.end_date || '—'}</span>
+                </div>
+              )}
+
+              {/* 単価・上限 */}
+              <div className="grid grid-cols-2 gap-4 p-3 bg-muted/50 rounded-lg">
+                <div className="flex items-center gap-2">
+                  <Banknote className="w-4 h-4 text-muted-foreground" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">案件単価</p>
+                    <p className="text-sm font-semibold">¥{detailProject.unit_price?.toLocaleString() || '—'}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Target className="w-4 h-4 text-muted-foreground" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">上限</p>
+                    <p className="text-sm font-semibold">
+                      {detailProject.is_unlimited ? '無制限' : `${detailProject.max_appointments_total}件`}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* サービス概要 */}
+              {detailProject.service_overview && (
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1"><Info className="w-3 h-3" />サービス概要</p>
+                  <p className="text-sm whitespace-pre-wrap bg-muted/30 p-3 rounded-lg">{detailProject.service_overview}</p>
+                </div>
+              )}
+
+              {/* 案件詳細 */}
+              {detailProject.project_detail && (
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1"><FileText className="w-3 h-3" />案件詳細</p>
+                  <p className="text-sm whitespace-pre-wrap bg-muted/30 p-3 rounded-lg">{detailProject.project_detail}</p>
+                </div>
+              )}
+
+              {/* 獲得条件 */}
+              {detailProject.acquisition_conditions && (
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1"><Target className="w-3 h-3" />獲得条件</p>
+                  <p className="text-sm whitespace-pre-wrap bg-muted/30 p-3 rounded-lg">{detailProject.acquisition_conditions}</p>
+                </div>
+              )}
+
+              {/* 日程調整URL */}
+              {detailProject.scheduling_url && (
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">日程調整URL</p>
+                  <a
+                    href={detailProject.scheduling_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-primary hover:underline inline-flex items-center gap-1"
+                  >
+                    {detailProject.scheduling_url}
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+              )}
+
+              {/* ステータス */}
+              <div className="flex items-center gap-2 pt-2 border-t">
+                <span className="text-xs text-muted-foreground">ステータス:</span>
+                <StatusBadge status={detailProject.status} />
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

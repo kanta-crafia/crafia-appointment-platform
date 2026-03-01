@@ -141,7 +141,6 @@ export default function Projects() {
                 <TableHead className="w-20">案件番号</TableHead>
                 <TableHead>案件名</TableHead>
                 <TableHead>企業名</TableHead>
-                <TableHead>サービス</TableHead>
                 <TableHead className="text-right">単価</TableHead>
                 <TableHead className="text-center">月次上限</TableHead>
                 <TableHead className="text-center">確定数</TableHead>
@@ -160,7 +159,6 @@ export default function Projects() {
                     <TableCell className="text-sm text-muted-foreground font-mono">{p.project_number || '—'}</TableCell>
                     <TableCell className="font-medium">{p.title}</TableCell>
                     <TableCell className="text-sm">{p.company_name || '—'}</TableCell>
-                    <TableCell className="text-sm">{p.service_name || '—'}</TableCell>
                     <TableCell className="text-right font-mono">{p.unit_price ? `¥${p.unit_price.toLocaleString()}` : '—'}</TableCell>
                     <TableCell className="text-center">{getMaxDisplay(p)}</TableCell>
                     <TableCell className="text-center font-semibold text-emerald-700">{p.confirmed_count}</TableCell>
@@ -180,7 +178,7 @@ export default function Projects() {
                 );
               })}
               {projects.length === 0 && (
-                <TableRow><TableCell colSpan={11} className="text-center text-muted-foreground py-8">案件がまだありません</TableCell></TableRow>
+                <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground py-8">案件がまだありません</TableCell></TableRow>
               )}
             </TableBody>
           </Table>
@@ -207,16 +205,10 @@ export default function Projects() {
               </div>
             </div>
 
-            {/* Row 2: 企業名 + サービス */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>企業名</Label>
-                <Input value={companyName} onChange={(e) => setCompanyName(e.target.value)} placeholder="株式会社〇〇" />
-              </div>
-              <div className="space-y-2">
-                <Label>サービス</Label>
-                <Input value={serviceName} onChange={(e) => setServiceName(e.target.value)} placeholder="〇〇サービス" />
-              </div>
+            {/* Row 2: 企業名 */}
+            <div className="space-y-2">
+              <Label>企業名</Label>
+              <Input value={companyName} onChange={(e) => setCompanyName(e.target.value)} placeholder="株式会社〇〇" />
             </div>
 
             {/* サービス概要 */}

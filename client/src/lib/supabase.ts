@@ -105,6 +105,8 @@ export interface Appointment {
   meeting_datetime: string;
   notes: string | null;
   evidence_url: string | null;
+  acquisition_date: string | null;
+  acquirer_name: string | null;
   status: AppointmentStatus;
   approved_by: string | null;
   approved_at: string | null;

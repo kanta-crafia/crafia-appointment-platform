@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { CheckCircle, XCircle, Ban, ExternalLink } from 'lucide-react';
+import { CheckCircle, XCircle, Ban } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 
@@ -125,7 +125,7 @@ export default function Approvals() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>対象企業</TableHead>
+                    <TableHead>先方企業名</TableHead>
                     <TableHead>案件</TableHead>
                     <TableHead>登録企業</TableHead>
                     <TableHead>商談日時</TableHead>
@@ -170,11 +170,11 @@ export default function Approvals() {
             <div className="space-y-4 py-2">
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <p className="text-muted-foreground">対象企業</p>
+                  <p className="text-muted-foreground">先方企業名</p>
                   <p className="font-medium">{selectedAppt.target_company_name}</p>
                 </div>
                 <div>
-                  <p className="text-muted-foreground">担当者</p>
+                  <p className="text-muted-foreground">先方担当者名</p>
                   <p className="font-medium">{selectedAppt.contact_person || '—'}</p>
                 </div>
                 <div>
@@ -200,14 +200,16 @@ export default function Approvals() {
                   <p className="mt-1 whitespace-pre-wrap">{selectedAppt.notes}</p>
                 </div>
               )}
-              {selectedAppt.evidence_url && (
-                <div className="text-sm">
-                  <p className="text-muted-foreground">証跡URL</p>
-                  <a href={selectedAppt.evidence_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline inline-flex items-center gap-1 mt-1">
-                    {selectedAppt.evidence_url} <ExternalLink className="w-3 h-3" />
-                  </a>
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p className="text-muted-foreground">獲得日</p>
+                  <p className="font-medium">{(selectedAppt as any).acquisition_date || '—'}</p>
                 </div>
-              )}
+                <div>
+                  <p className="text-muted-foreground">獲得者名</p>
+                  <p className="font-medium">{(selectedAppt as any).acquirer_name || '—'}</p>
+                </div>
+              </div>
               {selectedAppt.rejected_reason && (
                 <div className="text-sm">
                   <p className="text-muted-foreground">却下/取消理由</p>
