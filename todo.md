@@ -61,6 +61,6 @@
 - [x] GitHubプッシュ・Vercel再デプロイ
 
 ## バグ修正: アポ登録時のメール通知が届かない
-- [ ] 原因調査（フロントエンドのメール送信コード、Edge Functionの呼び出し）
-- [ ] 修正・テスト
-- [ ] GitHubプッシュ・Vercel再デプロイ
+- [x] 原因調査: sendEmailNotificationがawaitされず、直後のnavigate()でfetchがキャンセルされていた
+- [x] 修正: await sendEmailNotification()を追加し、メール送信完了後にページ遷移するように変更
+- [x] GitHubプッシュ・Vercel再デプロイ完了
