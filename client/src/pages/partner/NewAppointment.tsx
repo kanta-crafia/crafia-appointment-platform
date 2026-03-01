@@ -125,15 +125,16 @@ export default function NewAppointment() {
       evidence_url: evidenceUrl || null,
       status: 'pending',
     });
-    setSaving(false);
 
     if (error) {
+      setSaving(false);
       toast.error('登録に失敗しました', { description: error.message });
     } else {
-      // アポ登録成功後にメール通知を送信（バックグラウンド）
+      // アポ登録成功後にメール通知を送信（ページ遷移前に完了を待つ）
       const projectTitle = selectedProject?.title || '不明な案件';
-      sendEmailNotification(projectTitle);
+      await sendEmailNotification(projectTitle);
 
+      setSaving(false);
       toast.success('アポイントを登録しました', { description: '承認待ちの状態です' });
       navigate('/appointments');
     }
