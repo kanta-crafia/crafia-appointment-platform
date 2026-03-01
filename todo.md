@@ -49,6 +49,8 @@
   - ログイン・リロード両方が本番環境で正常動作を確認
 
 ## アポ登録時の管理者メール通知
-- [ ] パートナーがアポ登録した際に管理者（kanta@crafia-hd.com）にメール通知を送信する
-- [ ] テスト・動作確認
-- [ ] GitHubプッシュ・Vercel再デプロイ
+- [x] パートナーがアポ登録した際に管理者（kanta@crafia-hd.com）にメール通知を送信する
+  - Supabase Edge Function (send-appointment-email) + Resend APIで実装
+  - Vercel静的デプロイでも動作する方式
+- [x] テスト・動作確認（curlでEdge Functionの直接テスト成功）
+- [x] GitHubプッシュ・Vercel再デプロイ完了
