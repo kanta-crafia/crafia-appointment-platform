@@ -64,11 +64,12 @@ export default function NewAppointment() {
     }
   }, [user]);
 
-  // メール通知を送信する
+  // Supabase Edge Function経由でメール通知を送信する
   const sendEmailNotification = async (projectTitle: string) => {
     try {
       const partnerName = await getPartnerOrgName();
-      const response = await fetch('/api/email/appointment-notification', {
+      const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/send-appointment-email`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

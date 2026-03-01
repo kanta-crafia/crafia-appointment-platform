@@ -47,3 +47,8 @@
   - 修正: supabase.tsにnoOpLock関数を追加してWeb Locksを完全にバイパス
   - AuthContextをシンプルなgetSession()ベースの実装に簡素化
   - ログイン・リロード両方が本番環境で正常動作を確認
+
+## アポ登録時の管理者メール通知
+- [ ] パートナーがアポ登録した際に管理者（kanta@crafia-hd.com）にメール通知を送信する
+- [ ] テスト・動作確認
+- [ ] GitHubプッシュ・Vercel再デプロイ
