@@ -134,7 +134,10 @@ export interface SnsAccount {
   account_name: string;
   login_id: string;
   login_password: string;
+  gmail_address: string | null;
+  gmail_password: string | null;
   assigned_user_id: string | null;
+  assigned_company_name: string | null;
   assigned_at: string | null;
   notes: string | null;
   status: SnsAccountStatus;

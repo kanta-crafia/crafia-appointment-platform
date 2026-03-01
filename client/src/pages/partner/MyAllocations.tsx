@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Link } from 'wouter';
-import { ClipboardCheck, Infinity, Eye, ExternalLink, Calendar, Banknote, FileText, Target, Info } from 'lucide-react';
+import { ClipboardCheck, Infinity, Eye, ExternalLink, Calendar, FileText, Target, Info } from 'lucide-react';
 
 export default function MyAllocations() {
   const { user } = useAuth();
@@ -159,21 +159,14 @@ export default function MyAllocations() {
                 </div>
               )}
 
-              {/* 単価・上限 */}
-              <div className="grid grid-cols-2 gap-4 p-3 bg-muted/50 rounded-lg">
-                <div className="flex items-center gap-2">
-                  <Banknote className="w-4 h-4 text-muted-foreground" />
-                  <div>
-                    <p className="text-xs text-muted-foreground">案件単価</p>
-                    <p className="text-sm font-semibold">¥{detailProject.unit_price?.toLocaleString() || '—'}</p>
-                  </div>
-                </div>
+              {/* 上限 */}
+              <div className="p-3 bg-muted/50 rounded-lg">
                 <div className="flex items-center gap-2">
                   <Target className="w-4 h-4 text-muted-foreground" />
                   <div>
                     <p className="text-xs text-muted-foreground">上限</p>
                     <p className="text-sm font-semibold">
-                      {detailProject.is_unlimited ? '無制限' : `${detailProject.max_appointments_total}件`}
+                      {detailProject?.is_unlimited ? '無制限' : `${detailProject?.max_appointments_total}件`}
                     </p>
                   </div>
                 </div>
