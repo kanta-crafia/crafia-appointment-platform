@@ -84,4 +84,4 @@
 - [x] 案件残数管理: 管理者が案件編集ダイアログで残数を直接編集可能
 - [x] 案件残数管理: パートナー側MyAllocationsに残数表示済み
 - [x] 月次残数リセット: pg_cronで毎月1日JST 0:00にconfirmed_countを0にリセット
-- [ ] GitHubプッシュ・Vercel再デプロイ
+- [x] GitHubプッシュ・Vercel再デプロイ
