@@ -84,11 +84,12 @@ export default function NewAppointment() {
           partnerName,
           projectTitle,
           targetCompany,
-          contactPerson: contactPerson || null,
+          contactPerson,
           meetingDatetime,
-          notes: notes || null,
-          acquisitionDate: acquisitionDate || null,
-          acquirerName: acquirerName || null,
+          notes,
+          acquisitionDate,
+          acquirerName,
+          subject: `【代理店/アポ獲得】${partnerName}`,
         }),
       });
       const result = await response.json();
@@ -103,7 +104,7 @@ export default function NewAppointment() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!allocationId || !targetCompany || !meetingDatetime) {
+    if (!allocationId || !targetCompany || !contactPerson || !meetingDatetime || !acquisitionDate || !acquirerName || !notes) {
       toast.error('必須項目を入力してください');
       return;
     }
@@ -128,11 +129,11 @@ export default function NewAppointment() {
       created_by_user_id: user?.id,
       org_id: user?.org_id,
       target_company_name: targetCompany,
-      contact_person: contactPerson || null,
+      contact_person: contactPerson,
       meeting_datetime: meetingDatetime,
-      notes: notes || null,
-      acquisition_date: acquisitionDate || null,
-      acquirer_name: acquirerName || null,
+      notes: notes,
+      acquisition_date: acquisitionDate,
+      acquirer_name: acquirerName,
       status: 'pending',
     });
 
@@ -179,9 +180,10 @@ export default function NewAppointment() {
                     const isUnlimited = proj?.is_unlimited;
                     const remaining = isUnlimited ? null : (proj?.max_appointments_total || 0) - (proj?.confirmed_count || 0);
                     const isFull = !isUnlimited && remaining !== null && remaining <= 0;
+                    const projectNumber = proj?.project_number ? `[${proj.project_number}] ` : '';
                     return (
                       <SelectItem key={a.id} value={a.id} disabled={isFull}>
-                        {proj?.title}{isUnlimited ? '' : ` (残${remaining}件)`}{isFull ? ' — 上限到達' : ''}
+                        {projectNumber}{proj?.title}{isUnlimited ? '' : ` (残${remaining}件)`}{isFull ? ' — 上限到達' : ''}
                       </SelectItem>
                     );
                   })}
@@ -204,8 +206,8 @@ export default function NewAppointment() {
             </div>
 
             <div className="space-y-2">
-              <Label>先方担当者名</Label>
-              <Input value={contactPerson} onChange={(e) => setContactPerson(e.target.value)} placeholder="山田 太郎" />
+              <Label>先方担当者名 <span className="text-destructive">*</span></Label>
+              <Input value={contactPerson} onChange={(e) => setContactPerson(e.target.value)} placeholder="山田 太郎" required />
             </div>
 
             <div className="space-y-2">
@@ -215,18 +217,18 @@ export default function NewAppointment() {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>獲得日</Label>
-                <Input type="date" value={acquisitionDate} onChange={(e) => setAcquisitionDate(e.target.value)} />
+                <Label>獲得日 <span className="text-destructive">*</span></Label>
+                <Input type="date" value={acquisitionDate} onChange={(e) => setAcquisitionDate(e.target.value)} required />
               </div>
               <div className="space-y-2">
-                <Label>獲得者名</Label>
-                <Input value={acquirerName} onChange={(e) => setAcquirerName(e.target.value)} placeholder="獲得者の名前" />
+                <Label>獲得者名 <span className="text-destructive">*</span></Label>
+                <Input value={acquirerName} onChange={(e) => setAcquirerName(e.target.value)} placeholder="獲得者の名前" required />
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label>メモ</Label>
-              <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="補足情報があれば記入" rows={3} />
+              <Label>メモ <span className="text-destructive">*</span></Label>
+              <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="補足情報を記入" rows={3} required />
             </div>
 
             <div className="flex gap-3 pt-2">

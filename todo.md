@@ -74,3 +74,14 @@
 - [x] アポ登録: 対象企業名→先方企業名、担当者名→先方担当者名にラベル変更（承認画面・パートナー一覧も対応）
 - [x] DB: appointmentsテーブルにacquisition_date, acquirer_nameカラム追加
 - [x] GitHubプッシュ・Vercel再デプロイ
+
+## v1.5.0 アポ登録UI改善・残数管理
+- [x] アポ登録: 案件選択時に案件番号と案件名をセットで表示
+- [x] アポ登録: 全ての項目を必須入力にする
+- [x] メール件名を【代理店/アポ獲得】(パートナー企業名) に変更（Edge Function更新済み）
+- [x] 案件残数管理: confirmed_countを使った残数計算（max_appointments_total - confirmed_count）
+- [x] 案件残数管理: アポ承認時にconfirmed_countを+1（approve_appointment関数で自動減算）
+- [x] 案件残数管理: 管理者が案件編集ダイアログで残数を直接編集可能
+- [x] 案件残数管理: パートナー側MyAllocationsに残数表示済み
+- [x] 月次残数リセット: pg_cronで毎月1日JST 0:00にconfirmed_countを0にリセット
+- [ ] GitHubプッシュ・Vercel再デプロイ

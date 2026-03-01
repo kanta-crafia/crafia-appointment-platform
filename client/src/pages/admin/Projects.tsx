@@ -43,6 +43,7 @@ export default function Projects() {
   const [maxAppts, setMaxAppts] = useState(0);
   const [priority, setPriority] = useState<Priority>('normal');
   const [status, setStatus] = useState<'active' | 'inactive' | 'closed'>('active');
+  const [remainingCount, setRemainingCount] = useState(0);
 
   const fetchProjects = useCallback(async () => {
     setLoading(true);
@@ -75,6 +76,7 @@ export default function Projects() {
     setSchedulingUrl(p.scheduling_url || '');
     setIsUnlimited(p.is_unlimited || false);
     setMaxAppts(p.max_appointments_total);
+    setRemainingCount(p.is_unlimited ? 0 : p.max_appointments_total - p.confirmed_count);
     setPriority(p.priority || 'normal');
     setStatus(p.status);
     setShowDialog(true);
@@ -83,6 +85,11 @@ export default function Projects() {
   const handleSave = async () => {
     if (!title) { toast.error('案件名を入力してください'); return; }
     setSaving(true);
+    // 残数から confirmed_count を逆算
+    const newConfirmedCount = editProject && !isUnlimited
+      ? Math.max(0, maxAppts - remainingCount)
+      : (editProject ? editProject.confirmed_count : 0);
+
     const payload = {
       title,
       project_number: projectNumber || null,
@@ -95,6 +102,7 @@ export default function Projects() {
       scheduling_url: schedulingUrl || null,
       is_unlimited: isUnlimited,
       max_appointments_total: isUnlimited ? 0 : maxAppts,
+      confirmed_count: newConfirmedCount,
       priority,
       status,
     };
@@ -246,7 +254,7 @@ export default function Projects() {
               <Label>アポイント上限（月単位）</Label>
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-2">
-                  <Switch checked={isUnlimited} onCheckedChange={setIsUnlimited} />
+                  <Switch checked={isUnlimited} onCheckedChange={(v) => { setIsUnlimited(v); if (v) setRemainingCount(0); else setRemainingCount(maxAppts); }} />
                   <span className="text-sm text-muted-foreground">無制限</span>
                 </div>
                 {!isUnlimited && (
@@ -254,13 +262,36 @@ export default function Projects() {
                     type="number"
                     min={0}
                     value={maxAppts}
-                    onChange={(e) => setMaxAppts(Number(e.target.value))}
+                    onChange={(e) => {
+                      const newMax = Number(e.target.value);
+                      setMaxAppts(newMax);
+                      if (!editProject) setRemainingCount(newMax);
+                    }}
                     className="w-32"
                     placeholder="10"
                   />
                 )}
               </div>
             </div>
+
+            {/* 残数（編集時のみ表示） */}
+            {editProject && !isUnlimited && (
+              <div className="space-y-2">
+                <Label>残数（直接編集可能）</Label>
+                <div className="flex items-center gap-3">
+                  <Input
+                    type="number"
+                    min={0}
+                    max={maxAppts}
+                    value={remainingCount}
+                    onChange={(e) => setRemainingCount(Math.min(maxAppts, Math.max(0, Number(e.target.value))))}
+                    className="w-32"
+                  />
+                  <span className="text-sm text-muted-foreground">/ {maxAppts}</span>
+                </div>
+                <p className="text-xs text-muted-foreground">確定数: {maxAppts - remainingCount} 件</p>
+              </div>
+            )}
 
             {/* Row: 優先順位 + ステータス */}
             <div className="grid grid-cols-2 gap-4">
