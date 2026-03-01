@@ -73,4 +73,4 @@
 - [x] アポ登録: 獲得日と獲得者名を追加（DBカラムも追加済み）
 - [x] アポ登録: 対象企業名→先方企業名、担当者名→先方担当者名にラベル変更（承認画面・パートナー一覧も対応）
 - [x] DB: appointmentsテーブルにacquisition_date, acquirer_nameカラム追加
-- [ ] GitHubプッシュ・Vercel再デプロイ
+- [x] GitHubプッシュ・Vercel再デプロイ
