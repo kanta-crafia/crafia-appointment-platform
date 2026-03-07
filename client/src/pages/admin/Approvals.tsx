@@ -26,12 +26,17 @@ export default function Approvals() {
 
   const fetchAppointments = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase
-      .from('appointments')
-      .select('*, project:projects(title), organization:organizations(name), creator:users!appointments_created_by_user_id_fkey(full_name, email)')
-      .order('created_at', { ascending: false });
-    setAppointments(data || []);
-    setLoading(false);
+    try {
+      const { data } = await supabase
+        .from('appointments')
+        .select('*, project:projects(title), organization:organizations(name), creator:users!appointments_created_by_user_id_fkey(full_name, email)')
+        .order('created_at', { ascending: false });
+      setAppointments(data || []);
+    } catch (e) {
+      console.error('Approvals fetch error:', e);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => { fetchAppointments(); }, [fetchAppointments]);

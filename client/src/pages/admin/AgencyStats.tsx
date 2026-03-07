@@ -35,22 +35,27 @@ export default function AgencyStats() {
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const monthStart = format(currentMonth, 'yyyy-MM-dd');
-    const monthEnd = format(endOfMonth(currentMonth), 'yyyy-MM-dd');
+    try {
+      const monthStart = format(currentMonth, 'yyyy-MM-dd');
+      const monthEnd = format(endOfMonth(currentMonth), 'yyyy-MM-dd');
 
-    const [orgRes, apptRes] = await Promise.all([
-      supabase.from('organizations').select('*').order('name'),
-      supabase
-        .from('appointments')
-        .select('*, project:projects(title, project_number, company_name, unit_price), organization:organizations(name), creator:users!appointments_created_by_user_id_fkey(full_name, login_id)')
-        .gte('created_at', monthStart + 'T00:00:00')
-        .lte('created_at', monthEnd + 'T23:59:59')
-        .order('created_at', { ascending: false }),
-    ]);
+      const [orgRes, apptRes] = await Promise.all([
+        supabase.from('organizations').select('*').order('name'),
+        supabase
+          .from('appointments')
+          .select('*, project:projects(title, project_number, company_name, unit_price), organization:organizations(name), creator:users!appointments_created_by_user_id_fkey(full_name, login_id)')
+          .gte('created_at', monthStart + 'T00:00:00')
+          .lte('created_at', monthEnd + 'T23:59:59')
+          .order('created_at', { ascending: false }),
+      ]);
 
-    setOrgs(orgRes.data || []);
-    setAppointments(apptRes.data || []);
-    setLoading(false);
+      setOrgs(orgRes.data || []);
+      setAppointments(apptRes.data || []);
+    } catch (e) {
+      console.error('AgencyStats fetch error:', e);
+    } finally {
+      setLoading(false);
+    }
   }, [currentMonth]);
 
   useEffect(() => { fetchData(); }, [fetchData]);

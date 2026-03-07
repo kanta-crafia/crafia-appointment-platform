@@ -32,21 +32,28 @@ export default function Notifications() {
   const [calendarOpen, setCalendarOpen] = useState(false);
 
   const fetchNotifications = useCallback(async () => {
-    if (!user) return;
+    if (!user) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
+    try {
+      const dayStart = startOfDay(selectedDate).toISOString();
+      const dayEnd = endOfDay(selectedDate).toISOString();
 
-    const dayStart = startOfDay(selectedDate).toISOString();
-    const dayEnd = endOfDay(selectedDate).toISOString();
-
-    const { data } = await supabase
-      .from('notifications')
-      .select('*')
-      .eq('recipient_user_id', user.id)
-      .gte('created_at', dayStart)
-      .lte('created_at', dayEnd)
-      .order('created_at', { ascending: false });
-    setNotifications(data || []);
-    setLoading(false);
+      const { data } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('recipient_user_id', user.id)
+        .gte('created_at', dayStart)
+        .lte('created_at', dayEnd)
+        .order('created_at', { ascending: false });
+      setNotifications(data || []);
+    } catch (e) {
+      console.error('Notifications fetch error:', e);
+    } finally {
+      setLoading(false);
+    }
   }, [user, selectedDate]);
 
   useEffect(() => { fetchNotifications(); }, [fetchNotifications]);

@@ -53,9 +53,14 @@ export default function Projects() {
 
   const fetchProjects = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase.from('projects').select('*').order('created_at', { ascending: false });
-    setProjects(data || []);
-    setLoading(false);
+    try {
+      const { data } = await supabase.from('projects').select('*').order('created_at', { ascending: false });
+      setProjects(data || []);
+    } catch (e) {
+      console.error('Projects fetch error:', e);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => { fetchProjects(); }, [fetchProjects]);

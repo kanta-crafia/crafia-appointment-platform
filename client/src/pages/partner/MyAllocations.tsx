@@ -18,15 +18,23 @@ export default function MyAllocations() {
   const [showDetail, setShowDetail] = useState(false);
 
   const fetchAllocations = useCallback(async () => {
-    if (!user) return;
+    if (!user) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
-    const { data } = await supabase
-      .from('allocations')
-      .select('*, project:projects(*)')
-      .eq('child_org_id', user.org_id)
-      .order('created_at', { ascending: false });
-    setAllocations(data || []);
-    setLoading(false);
+    try {
+      const { data } = await supabase
+        .from('allocations')
+        .select('*, project:projects(*)')
+        .eq('child_org_id', user.org_id)
+        .order('created_at', { ascending: false });
+      setAllocations(data || []);
+    } catch (e) {
+      console.error('Allocations fetch error:', e);
+    } finally {
+      setLoading(false);
+    }
   }, [user]);
 
   useEffect(() => { fetchAllocations(); }, [fetchAllocations]);

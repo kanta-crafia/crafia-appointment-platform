@@ -40,19 +40,24 @@ export default function AuditLogs() {
 
   const fetchLogs = useCallback(async () => {
     setLoading(true);
-    let query = supabase
-      .from('audit_logs')
-      .select('*, actor:users!audit_logs_actor_user_id_fkey(full_name, login_id, email)', { count: 'exact' })
-      .order('created_at', { ascending: false })
-      .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+    try {
+      let query = supabase
+        .from('audit_logs')
+        .select('*, actor:users!audit_logs_actor_user_id_fkey(full_name, login_id, email)', { count: 'exact' })
+        .order('created_at', { ascending: false })
+        .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
 
-    if (filterAction !== 'all') query = query.eq('action', filterAction);
-    if (filterEntity !== 'all') query = query.eq('entity_type', filterEntity);
+      if (filterAction !== 'all') query = query.eq('action', filterAction);
+      if (filterEntity !== 'all') query = query.eq('entity_type', filterEntity);
 
-    const { data, count } = await query;
-    setLogs(data || []);
-    setTotalCount(count || 0);
-    setLoading(false);
+      const { data, count } = await query;
+      setLogs(data || []);
+      setTotalCount(count || 0);
+    } catch (e) {
+      console.error('AuditLogs fetch error:', e);
+    } finally {
+      setLoading(false);
+    }
   }, [page, filterAction, filterEntity]);
 
   useEffect(() => { fetchLogs(); }, [fetchLogs]);

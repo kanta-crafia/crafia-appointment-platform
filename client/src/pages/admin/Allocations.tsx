@@ -30,15 +30,20 @@ export default function Allocations() {
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const [allocRes, orgRes, projRes] = await Promise.all([
-      supabase.from('allocations').select('*, project:projects(*), parent_org:organizations!allocations_parent_org_id_fkey(name), child_org:organizations!allocations_child_org_id_fkey(name)').order('created_at', { ascending: false }),
-      supabase.from('organizations').select('*').eq('status', 'active').order('name'),
-      supabase.from('projects').select('*').eq('status', 'active').order('title'),
-    ]);
-    setAllocations(allocRes.data || []);
-    setOrgs(orgRes.data || []);
-    setProjects(projRes.data || []);
-    setLoading(false);
+    try {
+      const [allocRes, orgRes, projRes] = await Promise.all([
+        supabase.from('allocations').select('*, project:projects(*), parent_org:organizations!allocations_parent_org_id_fkey(name), child_org:organizations!allocations_child_org_id_fkey(name)').order('created_at', { ascending: false }),
+        supabase.from('organizations').select('*').eq('status', 'active').order('name'),
+        supabase.from('projects').select('*').eq('status', 'active').order('title'),
+      ]);
+      setAllocations(allocRes.data || []);
+      setOrgs(orgRes.data || []);
+      setProjects(projRes.data || []);
+    } catch (e) {
+      console.error('Allocations fetch error:', e);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);

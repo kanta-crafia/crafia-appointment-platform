@@ -63,9 +63,14 @@ export default function Organizations() {
 
   const fetchOrgs = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase.from('organizations').select('*').order('created_at');
-    setOrgs(data || []);
-    setLoading(false);
+    try {
+      const { data } = await supabase.from('organizations').select('*').order('created_at');
+      setOrgs(data || []);
+    } catch (e) {
+      console.error('Organizations fetch error:', e);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   const fetchUsers = useCallback(async () => {

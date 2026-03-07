@@ -21,15 +21,23 @@ export default function PartnerAppointments() {
   const [selectedAppt, setSelectedAppt] = useState<Appointment | null>(null);
 
   const fetchAppointments = useCallback(async () => {
-    if (!user) return;
+    if (!user) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
-    const { data } = await supabase
-      .from('appointments')
-      .select('*, project:projects(title)')
-      .eq('org_id', user.org_id)
-      .order('created_at', { ascending: false });
-    setAppointments(data || []);
-    setLoading(false);
+    try {
+      const { data } = await supabase
+        .from('appointments')
+        .select('*, project:projects(title)')
+        .eq('org_id', user.org_id)
+        .order('created_at', { ascending: false });
+      setAppointments(data || []);
+    } catch (e) {
+      console.error('Appointments fetch error:', e);
+    } finally {
+      setLoading(false);
+    }
   }, [user]);
 
   useEffect(() => { fetchAppointments(); }, [fetchAppointments]);
