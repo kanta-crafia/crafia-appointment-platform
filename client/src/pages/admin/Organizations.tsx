@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Pencil, UserPlus, Users, Building2, KeyRound, Eye, EyeOff, Copy, Check, Trash2 } from 'lucide-react';
+import { Plus, Pencil, UserPlus, Users, Building2, Eye, EyeOff, Copy, Check, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -25,7 +25,7 @@ export default function Organizations() {
   const [showOrgDialog, setShowOrgDialog] = useState(false);
   const [showUserCreateDialog, setShowUserCreateDialog] = useState(false);
   const [showUserEditDialog, setShowUserEditDialog] = useState(false);
-  const [showResetPwDialog, setShowResetPwDialog] = useState(false);
+
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showDeleteOrgDialog, setShowDeleteOrgDialog] = useState(false);
   const [deleteOrg, setDeleteOrg] = useState<Organization | null>(null);
@@ -33,7 +33,7 @@ export default function Organizations() {
   const [editOrg, setEditOrg] = useState<Organization | null>(null);
   const [editUser, setEditUser] = useState<User | null>(null);
   const [deleteUser, setDeleteUser] = useState<User | null>(null);
-  const [resetPwUser, setResetPwUser] = useState<User | null>(null);
+
   const [createUserOrgId, setCreateUserOrgId] = useState('');
 
   // Org form states
@@ -56,8 +56,7 @@ export default function Organizations() {
   const [editOrgId, setEditOrgId] = useState('');
   const [editStatus, setEditStatus] = useState('');
 
-  // Password reset
-  const [newPassword, setNewPassword] = useState('');
+
   const [showPassword, setShowPassword] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -198,22 +197,7 @@ export default function Organizations() {
     fetchUsers();
   };
 
-  // === Password Reset ===
-  const handleResetPassword = async () => {
-    if (!resetPwUser || !newPassword) return;
-    if (newPassword.length < 6) { toast.error('パスワードは6文字以上にしてください'); return; }
-    setSaving(true);
-    const { data, error } = await supabase.rpc('admin_reset_password', {
-      p_user_id: resetPwUser.id,
-      p_new_password: newPassword,
-    });
-    setSaving(false);
-    if (error) { toast.error('パスワードリセットに失敗しました', { description: error.message }); return; }
-    if (data?.error) { toast.error('パスワードリセットに失敗しました', { description: data.error }); return; }
-    toast.success('パスワードをリセットしました');
-    setShowResetPwDialog(false);
-    setNewPassword('');
-  };
+
 
   // === Org Delete ===
   const handleDeleteOrg = async () => {
@@ -287,12 +271,7 @@ export default function Organizations() {
     setShowDeleteDialog(true);
   };
 
-  const openResetPw = (user: User) => {
-    setResetPwUser(user);
-    setNewPassword(generatePassword());
-    setShowPassword(false);
-    setShowResetPwDialog(true);
-  };
+
 
   if (loading) {
     return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>;
@@ -424,9 +403,7 @@ export default function Organizations() {
                           <Button variant="ghost" size="sm" onClick={() => openEditUser(user)} title="編集">
                             <Pencil className="w-3.5 h-3.5" />
                           </Button>
-                          <Button variant="ghost" size="sm" onClick={() => openResetPw(user)} title="パスワードリセット">
-                            <KeyRound className="w-3.5 h-3.5" />
-                          </Button>
+
                           {user.id !== currentUser?.id && (
                             <Button variant="ghost" size="sm" onClick={() => openDeleteUser(user)} title="削除" className="text-destructive hover:text-destructive">
                               <Trash2 className="w-3.5 h-3.5" />
@@ -621,47 +598,7 @@ export default function Organizations() {
         </DialogContent>
       </Dialog>
 
-      {/* === Reset Password Dialog === */}
-      <Dialog open={showResetPwDialog} onOpenChange={setShowResetPwDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>パスワードリセット</DialogTitle>
-            <DialogDescription>ユーザーのパスワードを変更します</DialogDescription>
-          </DialogHeader>
-          {resetPwUser && (
-            <div className="space-y-4 py-2">
-              <div className="bg-muted/50 rounded-lg p-3 space-y-1">
-                <p className="text-sm"><span className="text-muted-foreground">ユーザーID:</span> <code className="font-mono">{resetPwUser.login_id || '—'}</code></p>
-                <p className="text-sm"><span className="text-muted-foreground">氏名:</span> {resetPwUser.full_name || '—'}</p>
-                <p className="text-sm"><span className="text-muted-foreground">所属:</span> {getOrgName(resetPwUser.org_id)}</p>
-              </div>
-              <div className="space-y-2">
-                <Label>新しいパスワード</Label>
-                <div className="flex gap-2">
-                  <div className="relative flex-1">
-                    <Input
-                      type={showPassword ? 'text' : 'password'}
-                      value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
-                      placeholder="6文字以上"
-                    />
-                    <Button type="button" variant="ghost" size="sm" className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0" onClick={() => setShowPassword(!showPassword)}>
-                      {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                    </Button>
-                  </div>
-                  <Button type="button" variant="outline" size="sm" onClick={() => setNewPassword(generatePassword())}>自動生成</Button>
-                </div>
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowResetPwDialog(false)}>キャンセル</Button>
-            <Button onClick={handleResetPassword} disabled={saving || !newPassword || newPassword.length < 6}>
-              {saving ? 'リセット中...' : 'パスワードをリセット'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+
 
       {/* === Delete Org Confirmation === */}
       <AlertDialog open={showDeleteOrgDialog} onOpenChange={setShowDeleteOrgDialog}>
