@@ -11,8 +11,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Pencil, ArrowUp, ArrowRight, ArrowDown, ExternalLink, Infinity } from 'lucide-react';
+import { Plus, Pencil, Trash2, ArrowUp, ArrowRight, ArrowDown, ExternalLink, Infinity } from 'lucide-react';
 import { toast } from 'sonner';
 
 const priorityConfig = {
@@ -28,6 +29,11 @@ export default function Projects() {
   const [showDialog, setShowDialog] = useState(false);
   const [editProject, setEditProject] = useState<Project | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // Delete states
+  const [deleteTarget, setDeleteTarget] = useState<Project | null>(null);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   // Form states
   const [projectNumber, setProjectNumber] = useState('');
@@ -119,6 +125,35 @@ export default function Projects() {
     fetchProjects();
   };
 
+  const openDelete = (p: Project) => {
+    setDeleteTarget(p);
+    setShowDeleteDialog(true);
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      // まず関連する割り当てを削除
+      await supabase.from('allocations').delete().eq('project_id', deleteTarget.id);
+      // 関連するアポイントを削除
+      await supabase.from('appointments').delete().eq('project_id', deleteTarget.id);
+      // 案件を削除
+      const { error } = await supabase.from('projects').delete().eq('id', deleteTarget.id);
+      if (error) {
+        toast.error('削除に失敗しました: ' + error.message);
+      } else {
+        toast.success(`案件「${deleteTarget.title}」を削除しました`);
+        fetchProjects();
+      }
+    } catch (err) {
+      toast.error('削除中にエラーが発生しました');
+    }
+    setDeleting(false);
+    setShowDeleteDialog(false);
+    setDeleteTarget(null);
+  };
+
   const getRemainingCount = (p: Project) => {
     if (p.is_unlimited) return '—';
     return p.max_appointments_total - p.confirmed_count;
@@ -137,7 +172,7 @@ export default function Projects() {
     <div>
       <PageHeader
         title="案件管理"
-        description="案件の作成・編集・ステータス管理"
+        description="案件の作成・編集・削除・ステータス管理"
         action={<Button onClick={openCreate}><Plus className="w-4 h-4 mr-2" />案件を作成</Button>}
       />
 
@@ -178,9 +213,14 @@ export default function Projects() {
                     </TableCell>
                     <TableCell><StatusBadge status={p.status} /></TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="sm" onClick={() => openEdit(p)}>
-                        <Pencil className="w-3.5 h-3.5" />
-                      </Button>
+                      <div className="flex items-center justify-end gap-1">
+                        <Button variant="ghost" size="sm" onClick={() => openEdit(p)}>
+                          <Pencil className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => openDelete(p)} className="text-destructive hover:text-destructive hover:bg-destructive/10">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 );
@@ -254,7 +294,7 @@ export default function Projects() {
               <Label>アポイント上限（月単位）</Label>
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-2">
-                  <Switch checked={isUnlimited} onCheckedChange={(v) => { setIsUnlimited(v); if (v) setRemainingCount(0); else setRemainingCount(maxAppts); }} />
+                  <Switch checked={isUnlimited} onCheckedChange={(v) => { setIsUnlimited(v); if (v) setRemainingCount(0); }} />
                   <span className="text-sm text-muted-foreground">無制限</span>
                 </div>
                 {!isUnlimited && (
@@ -325,6 +365,30 @@ export default function Projects() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* === Delete Confirmation Dialog === */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>案件を削除しますか？</AlertDialogTitle>
+            <AlertDialogDescription>
+              案件「<strong>{deleteTarget?.title}</strong>」を削除します。
+              この操作により、関連する割り当てとアポイントもすべて削除されます。
+              この操作は取り消せません。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>キャンセル</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting ? '削除中...' : '削除する'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
