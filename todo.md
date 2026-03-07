@@ -99,3 +99,6 @@
 ## v1.7.1 バグ修正: 案件削除の外部キー制約エラー
 - [x] allocations_project_id_fkey違反を修正（削除順序: appointments→allocations→projects）
 - [x] AlertDialogActionのe.preventDefault()でダイアログ自動閉じを防止
+
+## v1.7.2 バグ修正: 案件作成時に保存できない場合がある
+- [x] handleSaveをtry-catch-finallyで堅牢化、エラー詳細表示、user検証追加、saving状態の確実なリセット

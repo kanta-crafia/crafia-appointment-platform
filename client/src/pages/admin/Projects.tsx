@@ -90,39 +90,61 @@ export default function Projects() {
 
   const handleSave = async () => {
     if (!title) { toast.error('案件名を入力してください'); return; }
-    setSaving(true);
-    // 残数から confirmed_count を逆算
-    const newConfirmedCount = editProject && !isUnlimited
-      ? Math.max(0, maxAppts - remainingCount)
-      : (editProject ? editProject.confirmed_count : 0);
-
-    const payload = {
-      title,
-      project_number: projectNumber || null,
-      company_name: companyName || null,
-      service_name: serviceName || null,
-      service_overview: serviceOverview || null,
-      project_detail: projectDetail || null,
-      acquisition_conditions: acquisitionConditions || null,
-      unit_price: unitPrice,
-      scheduling_url: schedulingUrl || null,
-      is_unlimited: isUnlimited,
-      max_appointments_total: isUnlimited ? 0 : maxAppts,
-      confirmed_count: newConfirmedCount,
-      priority,
-      status,
-    };
-
-    if (editProject) {
-      const { error } = await supabase.from('projects').update(payload).eq('id', editProject.id);
-      if (error) toast.error('更新に失敗しました'); else toast.success('案件を更新しました');
-    } else {
-      const { error } = await supabase.from('projects').insert({ ...payload, created_by: user?.id });
-      if (error) toast.error('作成に失敗しました'); else toast.success('案件を作成しました');
+    if (!editProject && !user?.id) {
+      toast.error('ユーザー情報が取得できません。ページをリロードしてください');
+      return;
     }
-    setSaving(false);
-    setShowDialog(false);
-    fetchProjects();
+    setSaving(true);
+    try {
+      // 残数から confirmed_count を逆算
+      const newConfirmedCount = editProject && !isUnlimited
+        ? Math.max(0, maxAppts - remainingCount)
+        : (editProject ? editProject.confirmed_count : 0);
+
+      const payload = {
+        title,
+        project_number: projectNumber || null,
+        company_name: companyName || null,
+        service_name: serviceName || null,
+        service_overview: serviceOverview || null,
+        project_detail: projectDetail || null,
+        acquisition_conditions: acquisitionConditions || null,
+        unit_price: unitPrice,
+        scheduling_url: schedulingUrl || null,
+        is_unlimited: isUnlimited,
+        max_appointments_total: isUnlimited ? 0 : maxAppts,
+        confirmed_count: newConfirmedCount,
+        priority,
+        status,
+      };
+
+      if (editProject) {
+        const { error } = await supabase.from('projects').update(payload).eq('id', editProject.id);
+        if (error) {
+          console.error('Project update error:', error);
+          toast.error('更新に失敗しました: ' + error.message);
+        } else {
+          toast.success('案件を更新しました');
+          setShowDialog(false);
+          fetchProjects();
+        }
+      } else {
+        const { error } = await supabase.from('projects').insert({ ...payload, created_by: user!.id });
+        if (error) {
+          console.error('Project insert error:', error);
+          toast.error('作成に失敗しました: ' + error.message);
+        } else {
+          toast.success('案件を作成しました');
+          setShowDialog(false);
+          fetchProjects();
+        }
+      }
+    } catch (err) {
+      console.error('Project save exception:', err);
+      toast.error('保存中にエラーが発生しました');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const openDelete = (p: Project) => {
