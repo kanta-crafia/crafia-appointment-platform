@@ -106,11 +106,7 @@ export default function PartnerDashboard() {
                         <span className="text-xs font-medium text-muted-foreground w-10 text-right">{Math.round(pct)}%</span>
                       </div>
                     )}
-                    <div className="flex gap-4 mt-1">
-                      <p className="text-xs text-muted-foreground">自社承認: {myApproved}件</p>
-                      <p className="text-xs text-muted-foreground">自社待ち: {myPending}件</p>
-                      <p className="text-xs text-muted-foreground">卸単価: ¥{Number(a.payout_per_appointment).toLocaleString()}/アポ</p>
-                    </div>
+
                   </div>
                 );
               })}

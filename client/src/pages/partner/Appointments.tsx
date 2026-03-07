@@ -9,8 +9,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Link } from 'wouter';
-import { Plus } from 'lucide-react';
+import { Plus, Send } from 'lucide-react';
 import { format } from 'date-fns';
+import { toast } from 'sonner';
 
 export default function PartnerAppointments() {
   const { user } = useAuth();
@@ -19,6 +20,7 @@ export default function PartnerAppointments() {
   const [tab, setTab] = useState('all');
   const [showDetail, setShowDetail] = useState(false);
   const [selectedAppt, setSelectedAppt] = useState<Appointment | null>(null);
+  const [requestingApproval, setRequestingApproval] = useState<string | null>(null);
 
   const fetchAppointments = useCallback(async () => {
     if (!user) {
@@ -41,6 +43,56 @@ export default function PartnerAppointments() {
   }, [user]);
 
   useEffect(() => { fetchAppointments(); }, [fetchAppointments]);
+
+  const getPartnerOrgName = useCallback(async (): Promise<string> => {
+    if (!user?.org_id) return user?.full_name || 'パートナー';
+    try {
+      const { data } = await supabase
+        .from('organizations')
+        .select('name')
+        .eq('id', user.org_id)
+        .single();
+      return data?.name || user?.full_name || 'パートナー';
+    } catch {
+      return user?.full_name || 'パートナー';
+    }
+  }, [user]);
+
+  const handleRequestApproval = async (appt: Appointment, e: React.MouseEvent) => {
+    e.stopPropagation(); // 行クリックのdetail表示を防止
+    if (requestingApproval) return;
+
+    setRequestingApproval(appt.id);
+    try {
+      const partnerName = await getPartnerOrgName();
+      const projectTitle = (appt as any).project?.title || '案件';
+
+      const response = await fetch('/api/email/approval-request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          partnerName,
+          projectTitle,
+          targetCompany: appt.target_company_name,
+          contactPerson: appt.contact_person,
+          meetingDatetime: appt.meeting_datetime,
+          appointmentId: appt.id,
+        }),
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        toast.success('承認要求メールを送信しました');
+      } else {
+        toast.error('メール送信に失敗しました: ' + (result.error || '不明なエラー'));
+      }
+    } catch (error) {
+      console.error('Approval request error:', error);
+      toast.error('承認要求の送信に失敗しました');
+    } finally {
+      setRequestingApproval(null);
+    }
+  };
 
   const filtered = appointments.filter(a => tab === 'all' || a.status === tab);
 
@@ -85,6 +137,7 @@ export default function PartnerAppointments() {
                     <TableHead>商談日時</TableHead>
                     <TableHead>ステータス</TableHead>
                     <TableHead>登録日</TableHead>
+                    <TableHead className="w-[100px]">操作</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -96,10 +149,24 @@ export default function PartnerAppointments() {
                       <TableCell className="text-sm">{format(new Date(a.meeting_datetime), 'yyyy/MM/dd HH:mm')}</TableCell>
                       <TableCell><StatusBadge status={a.status} /></TableCell>
                       <TableCell className="text-sm text-muted-foreground">{format(new Date(a.created_at), 'MM/dd HH:mm')}</TableCell>
+                      <TableCell>
+                        {a.status === 'pending' && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-xs gap-1"
+                            disabled={requestingApproval === a.id}
+                            onClick={(e) => handleRequestApproval(a, e)}
+                          >
+                            <Send className="w-3 h-3" />
+                            {requestingApproval === a.id ? '送信中...' : '承認再要求'}
+                          </Button>
+                        )}
+                      </TableCell>
                     </TableRow>
                   ))}
                   {filtered.length === 0 && (
-                    <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">アポイントがありません</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">アポイントがありません</TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>
@@ -161,6 +228,20 @@ export default function PartnerAppointments() {
                 <div className="text-sm">
                   <p className="text-muted-foreground">却下/取消理由</p>
                   <p className="mt-1 text-red-700">{selectedAppt.rejected_reason}</p>
+                </div>
+              )}
+              {selectedAppt.status === 'pending' && (
+                <div className="pt-2 border-t">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5"
+                    disabled={requestingApproval === selectedAppt.id}
+                    onClick={(e) => handleRequestApproval(selectedAppt, e)}
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                    {requestingApproval === selectedAppt.id ? '送信中...' : '承認再要求メールを送信'}
+                  </Button>
                 </div>
               )}
             </div>

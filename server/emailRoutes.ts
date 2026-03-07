@@ -1,5 +1,5 @@
 import type { Express, Request, Response } from "express";
-import { sendAppointmentNotification, verifyEmailConnection, type AppointmentEmailData } from "./email";
+import { sendAppointmentNotification, sendApprovalRequestNotification, verifyEmailConnection, type AppointmentEmailData, type ApprovalRequestEmailData } from "./email";
 
 /**
  * メール通知用のExpressルートを登録する
@@ -28,6 +28,33 @@ export function registerEmailRoutes(app: Express) {
       }
     } catch (error) {
       console.error("[EmailRoute] Error:", error);
+      res.status(500).json({ success: false, error: "サーバーエラーが発生しました" });
+    }
+  });
+
+  // 承認再要求メール通知エンドポイント
+  app.post("/api/email/approval-request", async (req: Request, res: Response) => {
+    try {
+      const data = req.body as ApprovalRequestEmailData;
+
+      // バリデーション
+      if (!data.partnerName || !data.projectTitle || !data.targetCompany || !data.meetingDatetime || !data.appointmentId) {
+        res.status(400).json({
+          success: false,
+          error: "必須項目が不足しています（partnerName, projectTitle, targetCompany, meetingDatetime, appointmentId）",
+        });
+        return;
+      }
+
+      const success = await sendApprovalRequestNotification(data);
+
+      if (success) {
+        res.json({ success: true, message: "承認要求メールを送信しました" });
+      } else {
+        res.status(500).json({ success: false, error: "メール送信に失敗しました" });
+      }
+    } catch (error) {
+      console.error("[EmailRoute] Approval request error:", error);
       res.status(500).json({ success: false, error: "サーバーエラーが発生しました" });
     }
   });

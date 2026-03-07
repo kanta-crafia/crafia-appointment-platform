@@ -199,10 +199,9 @@ export default function NewAppointment() {
               </Select>
               {selectedAlloc && selectedProject && (
                 <p className="text-xs text-muted-foreground">
-                  卸単価: ¥{Number(selectedAlloc.payout_per_appointment).toLocaleString()}
                   {selectedProject.is_unlimited
-                    ? ' / 上限: 無制限'
-                    : ` / 残枠: ${selectedProject.max_appointments_total - selectedProject.confirmed_count}件`
+                    ? '上限: 無制限'
+                    : `残枠: ${selectedProject.max_appointments_total - selectedProject.confirmed_count}件`
                   }
                 </p>
               )}
