@@ -130,15 +130,26 @@ export default function Projects() {
     setShowDeleteDialog(true);
   };
 
-  const handleDelete = async () => {
+  const handleDelete = async (e: React.MouseEvent) => {
+    e.preventDefault();
     if (!deleteTarget) return;
     setDeleting(true);
     try {
-      // まず関連する割り当てを削除
-      await supabase.from('allocations').delete().eq('project_id', deleteTarget.id);
-      // 関連するアポイントを削除
-      await supabase.from('appointments').delete().eq('project_id', deleteTarget.id);
-      // 案件を削除
+      // 1. まずアポイントを削除（allocation_idとproject_idの両方を参照しているため最初に削除）
+      const { error: apptError } = await supabase.from('appointments').delete().eq('project_id', deleteTarget.id);
+      if (apptError) {
+        toast.error('アポイントの削除に失敗しました: ' + apptError.message);
+        setDeleting(false);
+        return;
+      }
+      // 2. 次に割り当てを削除（project_idを参照）
+      const { error: allocError } = await supabase.from('allocations').delete().eq('project_id', deleteTarget.id);
+      if (allocError) {
+        toast.error('割り当ての削除に失敗しました: ' + allocError.message);
+        setDeleting(false);
+        return;
+      }
+      // 3. 最後に案件を削除
       const { error } = await supabase.from('projects').delete().eq('id', deleteTarget.id);
       if (error) {
         toast.error('削除に失敗しました: ' + error.message);
@@ -380,7 +391,7 @@ export default function Projects() {
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deleting}>キャンセル</AlertDialogCancel>
             <AlertDialogAction
-              onClick={handleDelete}
+              onClick={(e) => handleDelete(e)}
               disabled={deleting}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >

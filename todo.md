@@ -95,3 +95,7 @@
 ## v1.7.0 案件削除機能
 - [x] 案件管理画面に案件削除ボタンを追加（確認ダイアログ付き）
 - [x] GitHubプッシュ・Vercel再デプロイ
+
+## v1.7.1 バグ修正: 案件削除の外部キー制約エラー
+- [x] allocations_project_id_fkey違反を修正（削除順序: appointments→allocations→projects）
+- [x] AlertDialogActionのe.preventDefault()でダイアログ自動閉じを防止
