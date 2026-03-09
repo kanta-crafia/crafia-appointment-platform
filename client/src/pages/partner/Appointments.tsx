@@ -12,7 +12,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Link } from 'wouter';
-import { Plus, Send, ChevronLeft, ChevronRight, Pencil } from 'lucide-react';
+import { Plus, Send, ChevronLeft, ChevronRight, Pencil, Trash2 } from 'lucide-react';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { format, addMonths, subMonths, isSameMonth } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import { toast } from 'sonner';
@@ -48,6 +49,8 @@ export default function PartnerAppointments() {
   const [editAcquisitionDate, setEditAcquisitionDate] = useState('');
   const [editAcquirerName, setEditAcquirerName] = useState('');
   const [saving, setSaving] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const fetchAppointments = useCallback(async () => {
     if (!user) {
@@ -213,6 +216,35 @@ export default function PartnerAppointments() {
       toast.error('更新中にエラーが発生しました');
     } finally {
       setSaving(false);
+    }
+  };
+
+  // アポイントを削除
+  const handleDeleteAppt = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (!editAppt) return;
+    setDeleting(true);
+    try {
+      const { error } = await supabase
+        .from('appointments')
+        .delete()
+        .eq('id', editAppt.id);
+
+      if (error) {
+        toast.error('削除に失敗しました', { description: error.message });
+        return;
+      }
+
+      toast.success('アポイントを削除しました');
+      setShowDeleteConfirm(false);
+      setShowEdit(false);
+      setShowDetail(false);
+      await fetchAppointments();
+    } catch (e) {
+      console.error('Delete error:', e);
+      toast.error('削除中にエラーが発生しました');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -482,14 +514,51 @@ export default function PartnerAppointments() {
               </div>
             </div>
           )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowEdit(false)} disabled={saving}>キャンセル</Button>
-            <Button onClick={handleSaveEdit} disabled={saving}>
-              {saving ? '保存中...' : '保存する'}
+          <DialogFooter className="flex justify-between sm:justify-between">
+            <Button
+              variant="destructive"
+              onClick={() => setShowDeleteConfirm(true)}
+              disabled={saving || deleting}
+              className="mr-auto"
+            >
+              <Trash2 className="h-4 w-4 mr-1" />
+              削除
             </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setShowEdit(false)} disabled={saving || deleting}>キャンセル</Button>
+              <Button onClick={handleSaveEdit} disabled={saving || deleting}>
+                {saving ? '保存中...' : '保存する'}
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* 削除確認ダイアログ */}
+      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>アポイントを削除しますか？</AlertDialogTitle>
+            <AlertDialogDescription>
+              {editAppt && (
+                <>
+                  「{editAppt.target_company_name}」のアポイントを削除します。この操作は取り消せません。
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>キャンセル</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteAppt}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting ? '削除中...' : '削除する'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
