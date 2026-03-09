@@ -233,6 +233,9 @@ export default function Approvals() {
           <DialogFooter className="flex gap-2">
             {selectedAppt?.status === 'pending' && (
               <>
+                <Button variant="outline" onClick={() => handleCancel(selectedAppt)} disabled={processing} className="text-gray-600">
+                  <Ban className="w-4 h-4 mr-1" /> キャンセル
+                </Button>
                 <Button variant="outline" onClick={() => handleReject(selectedAppt)} disabled={processing} className="text-red-600 border-red-200 hover:bg-red-50">
                   <XCircle className="w-4 h-4 mr-1" /> 却下
                 </Button>
