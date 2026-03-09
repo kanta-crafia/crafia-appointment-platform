@@ -273,7 +273,7 @@ export default function NewAppointment() {
 
             <div className="space-y-2">
               <Label>メモ <span className="text-destructive">*</span></Label>
-              <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="補足情報を記入" rows={3} required />
+              <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={"補足情報を記入\n・先方ニーズ/課題\n・取得チャネル\n・温度感　など・・・"} rows={5} required />
             </div>
 
             <div className="flex gap-3 pt-2">

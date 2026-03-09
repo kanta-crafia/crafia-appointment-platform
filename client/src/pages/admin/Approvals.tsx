@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { CheckCircle, XCircle, Ban, Pencil } from 'lucide-react';
+import { CheckCircle, XCircle, Ban, Pencil, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { Input } from '@/components/ui/input';
@@ -53,6 +53,42 @@ export default function Approvals() {
     if (tab === 'all') return true;
     return a.status === tab;
   });
+
+  const statusLabel = (s: string) => {
+    switch (s) {
+      case 'pending': return '保留中';
+      case 'approved': return '承認済';
+      case 'rejected': return '却下';
+      case 'cancelled': return '取消';
+      default: return s;
+    }
+  };
+
+  const handleCsvDownload = () => {
+    const headers = ['案件番号', '案件名', '先方企業名', '先方担当者名', '登録企業', '獲得者名', '商談日時', 'ステータス', 'メモ', '登録日'];
+    const rows = filtered.map(a => [
+      (a as any).project?.project_number || '',
+      (a as any).project?.title || '',
+      a.target_company_name,
+      a.contact_person || '',
+      (a as any).organization?.name || '',
+      (a as any).acquirer_name || '',
+      format(new Date(a.meeting_datetime), 'yyyy/MM/dd HH:mm'),
+      statusLabel(a.status),
+      (a.notes || '').replace(/\n/g, ' '),
+      format(new Date(a.created_at), 'yyyy/MM/dd HH:mm'),
+    ]);
+    const csvContent = '\uFEFF' + [headers, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const tabLabel = tab === 'all' ? '全て' : statusLabel(tab);
+    a.download = `アポイント一覧_${tabLabel}_${format(new Date(), 'yyyyMMdd')}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success('CSVをダウンロードしました');
+  };
 
   const handleApprove = async (appt: Appointment) => {
     setProcessing(true);
@@ -216,7 +252,13 @@ export default function Approvals() {
 
   return (
     <div>
-      <PageHeader title="アポイント承認" description="アポイントの確認・承認・却下・取消" />
+      <div className="flex items-center justify-between">
+        <PageHeader title="アポイント承認" description="アポイントの確認・承認・却下・取消" />
+        <Button variant="outline" size="sm" className="gap-1.5" onClick={handleCsvDownload} disabled={filtered.length === 0}>
+          <Download className="w-4 h-4" />
+          CSVダウンロード
+        </Button>
+      </div>
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
@@ -248,7 +290,7 @@ export default function Approvals() {
                 <TableBody>
                   {filtered.map((a) => (
                     <TableRow key={a.id} className="cursor-pointer hover:bg-muted/50" onClick={() => openDetail(a)}>
-                      <TableCell className="font-medium">{(a as any).project?.project_number ? `${(a as any).project.project_number} ` : ''}{(a as any).project?.title || '—'}</TableCell>
+                      <TableCell className="font-medium">{(a as any).project?.project_number ? `[${(a as any).project.project_number}] ` : ''}{(a as any).project?.title || '—'}</TableCell>
                       <TableCell className="text-muted-foreground">{a.target_company_name}</TableCell>
                       <TableCell className="text-muted-foreground">{(a as any).organization?.name}</TableCell>
                       <TableCell className="text-muted-foreground">{(a as any).acquirer_name || '—'}</TableCell>

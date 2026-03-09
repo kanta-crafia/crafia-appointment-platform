@@ -12,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Link } from 'wouter';
-import { Plus, Send, ChevronLeft, ChevronRight, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Send, ChevronLeft, ChevronRight, Pencil, Trash2, Download } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { format, addMonths, subMonths, isSameMonth } from 'date-fns';
 import { ja } from 'date-fns/locale';
@@ -288,6 +288,41 @@ export default function PartnerAppointments() {
     setShowDetail(true);
   };
 
+  const statusLabel = (s: string) => {
+    switch (s) {
+      case 'pending': return '保留中';
+      case 'approved': return '承認済';
+      case 'rejected': return '却下';
+      case 'cancelled': return '取消';
+      default: return s;
+    }
+  };
+
+  const handleCsvDownload = () => {
+    const headers = ['案件番号', '案件名', '先方企業名', '先方担当者名', '獲得者名', '商談日時', 'ステータス', 'メモ', '登録日'];
+    const rows = filtered.map(a => [
+      (a as any).project?.project_number || '',
+      (a as any).project?.title || '',
+      a.target_company_name,
+      a.contact_person || '',
+      (a as any).acquirer_name || '',
+      format(new Date(a.meeting_datetime), 'yyyy/MM/dd HH:mm'),
+      statusLabel(a.status),
+      (a.notes || '').replace(/\n/g, ' '),
+      format(new Date(a.created_at), 'yyyy/MM/dd HH:mm'),
+    ]);
+    const csvContent = '\uFEFF' + [headers, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const monthStr = format(selectedMonth, 'yyyyMM');
+    a.download = `アポイント一覧_${monthStr}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success('CSVをダウンロードしました');
+  };
+
   if (loading) {
     return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>;
   }
@@ -322,9 +357,15 @@ export default function PartnerAppointments() {
             </Button>
           )}
         </div>
-        <p className="text-sm text-muted-foreground">
-          {format(selectedMonth, 'M月', { locale: ja })}のアポ: <span className="font-semibold text-foreground">{statusCounts.all}件</span>
-        </p>
+        <div className="flex items-center gap-3">
+          <p className="text-sm text-muted-foreground">
+            {format(selectedMonth, 'M月', { locale: ja })}のアポ: <span className="font-semibold text-foreground">{statusCounts.all}件</span>
+          </p>
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={handleCsvDownload} disabled={filtered.length === 0}>
+            <Download className="w-4 h-4" />
+            CSV
+          </Button>
+        </div>
       </div>
 
       <Tabs value={tab} onValueChange={setTab}>
@@ -355,7 +396,7 @@ export default function PartnerAppointments() {
                 <TableBody>
                   {filtered.map((a) => (
                     <TableRow key={a.id} className="cursor-pointer hover:bg-muted/50" onClick={() => openDetail(a)}>
-                      <TableCell className="font-medium">{(a as any).project?.project_number ? `${(a as any).project.project_number} ` : ''}{(a as any).project?.title || '—'}</TableCell>
+                      <TableCell className="font-medium">{(a as any).project?.project_number ? `[${(a as any).project.project_number}] ` : ''}{(a as any).project?.title || '—'}</TableCell>
                       <TableCell className="text-muted-foreground">{a.target_company_name}</TableCell>
                       <TableCell>{a.contact_person || '—'}</TableCell>
                       <TableCell className="text-muted-foreground">{(a as any).acquirer_name || '—'}</TableCell>
