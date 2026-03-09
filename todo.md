@@ -174,4 +174,13 @@
 
 ## v2.3.1 キャッシュ制御
 - [x] Vercelのキャッシュヘッダーを設定してデプロイ後に自動で最新バージョンが表示されるようにする
+- [x] GitHubプッシュとVercelデプロイ
+
+## v2.4.0 案件番号表示・DB修正・名乗り会社保存
+- [x] アポ一覧の案件項目の左側に案件番号を表示（管理者・代理店両方）
+- [x] Supabaseのprojectsテーブルにprohibited_list_urlカラムを追加
+- [x] Supabaseのappointmentsテーブルにacquisition_company_typeカラムを追加
+- [x] スプレッドシート（アプローチ禁止リスト）の保存エラーを修正
+- [x] 「獲得時の名乗り会社」の値がDBに正しく保存されるように修正
+- [x] TypeScript型定義を更新（Project, Appointment）
 - [ ] GitHubプッシュとVercelデプロイ

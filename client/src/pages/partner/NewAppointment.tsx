@@ -165,7 +165,7 @@ export default function NewAppointment() {
       notes: notes,
       acquisition_date: acquisitionDate,
       acquirer_name: acquirerName,
-      acquired_company_name: acquiredCompanyName,
+      acquisition_company_type: acquiredCompanyName,
       status: 'pending',
     });
 

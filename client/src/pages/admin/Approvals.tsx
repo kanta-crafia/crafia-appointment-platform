@@ -37,7 +37,7 @@ export default function Approvals() {
     try {
       const { data } = await supabase
         .from('appointments')
-        .select('*, project:projects(title), organization:organizations(name), creator:users!appointments_created_by_user_id_fkey(full_name, email)')
+        .select('*, project:projects(title, project_number), organization:organizations(name), creator:users!appointments_created_by_user_id_fkey(full_name, email)')
         .order('created_at', { ascending: false });
       setAppointments(data || []);
     } catch (e) {
@@ -248,7 +248,7 @@ export default function Approvals() {
                 <TableBody>
                   {filtered.map((a) => (
                     <TableRow key={a.id} className="cursor-pointer hover:bg-muted/50" onClick={() => openDetail(a)}>
-                      <TableCell className="font-medium">{(a as any).project?.title || '—'} {(a as any).project?.project_number ? `(${(a as any).project.project_number})` : ''}</TableCell>
+                      <TableCell className="font-medium">{(a as any).project?.project_number ? `${(a as any).project.project_number} ` : ''}{(a as any).project?.title || '—'}</TableCell>
                       <TableCell className="text-muted-foreground">{a.target_company_name}</TableCell>
                       <TableCell className="text-muted-foreground">{(a as any).organization?.name}</TableCell>
                       <TableCell className="text-muted-foreground">{(a as any).acquirer_name || '—'}</TableCell>

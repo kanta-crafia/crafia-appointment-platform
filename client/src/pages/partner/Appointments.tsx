@@ -61,7 +61,7 @@ export default function PartnerAppointments() {
     try {
       const { data } = await supabase
         .from('appointments')
-        .select('*, project:projects(title)')
+        .select('*, project:projects(title, project_number)')
         .eq('org_id', user.org_id)
         .order('created_at', { ascending: false });
       setAppointments(data || []);
@@ -355,7 +355,7 @@ export default function PartnerAppointments() {
                 <TableBody>
                   {filtered.map((a) => (
                     <TableRow key={a.id} className="cursor-pointer hover:bg-muted/50" onClick={() => openDetail(a)}>
-                      <TableCell className="font-medium">{(a as any).project?.title || '—'} {(a as any).project?.project_number ? `(${(a as any).project.project_number})` : ''}</TableCell>
+                      <TableCell className="font-medium">{(a as any).project?.project_number ? `${(a as any).project.project_number} ` : ''}{(a as any).project?.title || '—'}</TableCell>
                       <TableCell className="text-muted-foreground">{a.target_company_name}</TableCell>
                       <TableCell>{a.contact_person || '—'}</TableCell>
                       <TableCell className="text-muted-foreground">{(a as any).acquirer_name || '—'}</TableCell>

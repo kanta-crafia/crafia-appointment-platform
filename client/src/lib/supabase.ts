@@ -78,6 +78,7 @@ export interface Project {
   status: ProjectStatus;
   created_at: string;
   created_by: string | null;
+  prohibited_list_url: string | null;
 }
 
 export interface Allocation {
@@ -107,6 +108,7 @@ export interface Appointment {
   evidence_url: string | null;
   acquisition_date: string | null;
   acquirer_name: string | null;
+  acquisition_company_type: string | null;
   status: AppointmentStatus;
   approved_by: string | null;
   approved_at: string | null;
