@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { supabase, type Appointment } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { PageHeader } from '@/components/PageHeader';
@@ -9,8 +9,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Link } from 'wouter';
-import { Plus, Send } from 'lucide-react';
-import { format } from 'date-fns';
+import { Plus, Send, ChevronLeft, ChevronRight } from 'lucide-react';
+import { format, startOfMonth, endOfMonth, addMonths, subMonths, isSameMonth } from 'date-fns';
+import { ja } from 'date-fns/locale';
 import { toast } from 'sonner';
 
 export default function PartnerAppointments() {
@@ -21,6 +22,7 @@ export default function PartnerAppointments() {
   const [showDetail, setShowDetail] = useState(false);
   const [selectedAppt, setSelectedAppt] = useState<Appointment | null>(null);
   const [requestingApproval, setRequestingApproval] = useState<string | null>(null);
+  const [selectedMonth, setSelectedMonth] = useState(() => new Date());
 
   const fetchAppointments = useCallback(async () => {
     if (!user) {
@@ -59,7 +61,7 @@ export default function PartnerAppointments() {
   }, [user]);
 
   const handleRequestApproval = async (appt: Appointment, e: React.MouseEvent) => {
-    e.stopPropagation(); // 行クリックのdetail表示を防止
+    e.stopPropagation();
     if (requestingApproval) return;
 
     setRequestingApproval(appt.id);
@@ -94,7 +96,32 @@ export default function PartnerAppointments() {
     }
   };
 
-  const filtered = appointments.filter(a => tab === 'all' || a.status === tab);
+  // 月別フィルター: 商談日時(meeting_datetime)を基準に絞り込み
+  const monthFiltered = useMemo(() => {
+    return appointments.filter(a => {
+      const meetingDate = new Date(a.meeting_datetime);
+      return isSameMonth(meetingDate, selectedMonth);
+    });
+  }, [appointments, selectedMonth]);
+
+  // ステータスフィルター: 月別フィルター後に適用
+  const filtered = useMemo(() => {
+    return monthFiltered.filter(a => tab === 'all' || a.status === tab);
+  }, [monthFiltered, tab]);
+
+  // 月別のステータス別件数
+  const statusCounts = useMemo(() => ({
+    all: monthFiltered.length,
+    pending: monthFiltered.filter(a => a.status === 'pending').length,
+    approved: monthFiltered.filter(a => a.status === 'approved').length,
+    rejected: monthFiltered.filter(a => a.status === 'rejected').length,
+  }), [monthFiltered]);
+
+  const goToPrevMonth = () => setSelectedMonth(prev => subMonths(prev, 1));
+  const goToNextMonth = () => setSelectedMonth(prev => addMonths(prev, 1));
+  const goToCurrentMonth = () => setSelectedMonth(new Date());
+
+  const isCurrentMonth = isSameMonth(selectedMonth, new Date());
 
   const openDetail = (appt: Appointment) => {
     setSelectedAppt(appt);
@@ -117,12 +144,35 @@ export default function PartnerAppointments() {
         }
       />
 
+      {/* 月選択UI */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="icon" className="h-8 w-8" onClick={goToPrevMonth}>
+            <ChevronLeft className="w-4 h-4" />
+          </Button>
+          <span className="text-lg font-semibold min-w-[140px] text-center">
+            {format(selectedMonth, 'yyyy年M月', { locale: ja })}
+          </span>
+          <Button variant="outline" size="icon" className="h-8 w-8" onClick={goToNextMonth}>
+            <ChevronRight className="w-4 h-4" />
+          </Button>
+          {!isCurrentMonth && (
+            <Button variant="ghost" size="sm" className="text-xs ml-2" onClick={goToCurrentMonth}>
+              今月に戻る
+            </Button>
+          )}
+        </div>
+        <p className="text-sm text-muted-foreground">
+          {format(selectedMonth, 'M月', { locale: ja })}のアポ: <span className="font-semibold text-foreground">{statusCounts.all}件</span>
+        </p>
+      </div>
+
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
-          <TabsTrigger value="all">全て ({appointments.length})</TabsTrigger>
-          <TabsTrigger value="pending">保留中 ({appointments.filter(a => a.status === 'pending').length})</TabsTrigger>
-          <TabsTrigger value="approved">承認済 ({appointments.filter(a => a.status === 'approved').length})</TabsTrigger>
-          <TabsTrigger value="rejected">却下 ({appointments.filter(a => a.status === 'rejected').length})</TabsTrigger>
+          <TabsTrigger value="all">全て ({statusCounts.all})</TabsTrigger>
+          <TabsTrigger value="pending">保留中 ({statusCounts.pending})</TabsTrigger>
+          <TabsTrigger value="approved">承認済 ({statusCounts.approved})</TabsTrigger>
+          <TabsTrigger value="rejected">却下 ({statusCounts.rejected})</TabsTrigger>
         </TabsList>
 
         <TabsContent value={tab} className="mt-4">
@@ -166,7 +216,11 @@ export default function PartnerAppointments() {
                     </TableRow>
                   ))}
                   {filtered.length === 0 && (
-                    <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">アポイントがありません</TableCell></TableRow>
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                        {format(selectedMonth, 'yyyy年M月', { locale: ja })}のアポイントがありません
+                      </TableCell>
+                    </TableRow>
                   )}
                 </TableBody>
               </Table>
