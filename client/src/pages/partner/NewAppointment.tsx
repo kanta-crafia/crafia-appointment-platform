@@ -32,6 +32,7 @@ export default function NewAppointment() {
   const [notes, setNotes] = useState('');
   const [acquisitionDate, setAcquisitionDate] = useState('');
   const [acquirerName, setAcquirerName] = useState('');
+  const [acquiredCompanyName, setAcquiredCompanyName] = useState('client');
 
   const fetchAllocations = useCallback(async () => {
     if (!user) {
@@ -130,8 +131,28 @@ export default function NewAppointment() {
       }
     }
 
+    // Check for duplicate target company in the same project
+    try {
+      const { data: existingAppts } = await supabase
+        .from('appointments')
+        .select('id')
+        .eq('project_id', selectedAlloc.project_id)
+        .eq('target_company_name', targetCompany)
+        .neq('status', 'rejected')
+        .neq('status', 'cancelled');
+      
+      if (existingAppts && existingAppts.length > 0) {
+        toast.error('この案件に同じ先方企業名のアポイントが既に存在します');
+        return;
+      }
+    } catch (checkError) {
+      console.error('Duplicate check error:', checkError);
+      toast.error('重複チェック中にエラーが発生しました');
+      return;
+    }
+
     setSaving(true);
-    // datetime-localの値をDateオブジェクト経由でISO文字列に変換（ブラウザのTZを考慮）
+    // datetime-localの値をDateオブジェクト経由でISO文字列に変換（ブラウザの TZを考慮）
     const meetingDateISO = new Date(meetingDatetime).toISOString();
     const { error } = await supabase.from('appointments').insert({
       project_id: selectedAlloc.project_id,
@@ -144,6 +165,7 @@ export default function NewAppointment() {
       notes: notes,
       acquisition_date: acquisitionDate,
       acquirer_name: acquirerName,
+      acquired_company_name: acquiredCompanyName,
       status: 'pending',
     });
 
@@ -233,6 +255,20 @@ export default function NewAppointment() {
                 <Label>獲得者名 <span className="text-destructive">*</span></Label>
                 <Input value={acquirerName} onChange={(e) => setAcquirerName(e.target.value)} placeholder="獲得者の名前" required />
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>獲得時の名乗り会社 <span className="text-destructive">*</span></Label>
+              <Select value={acquiredCompanyName} onValueChange={setAcquiredCompanyName}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="client">クライエント名</SelectItem>
+                  <SelectItem value="crafia">Crafia名乗り</SelectItem>
+                  <SelectItem value="self">自己着座</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">※着座いただく方が認識をされている会社名の入力をお願いします。</p>
+              <p className="text-xs text-muted-foreground">※自己着座の場合、株式会Crafia名乗りでアポ取得された形となります。</p>
             </div>
 
             <div className="space-y-2">

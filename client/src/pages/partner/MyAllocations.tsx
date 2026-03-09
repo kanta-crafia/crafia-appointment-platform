@@ -220,6 +220,23 @@ export default function MyAllocations() {
                 </div>
               )}
 
+              {/* アプローチ禁止リスト */}
+              {(detailProject as any).prohibited_list_url && (
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1"><Target className="w-3 h-3" />アプローチ禁止リスト</p>
+                  <a
+                    href={(detailProject as any).prohibited_list_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-primary hover:underline inline-flex items-center gap-1"
+                  >
+                    Googleシートを表示
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                  <p className="text-xs text-muted-foreground mt-1">アプローチ禁止対象の企業一覧を確認してからアポイントを登録してください</p>
+                </div>
+              )}
+
               {/* ステータス */}
               <div className="flex items-center gap-2 pt-2 border-t">
                 <span className="text-xs text-muted-foreground">ステータス:</span>

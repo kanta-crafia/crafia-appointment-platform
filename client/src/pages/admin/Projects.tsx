@@ -50,6 +50,7 @@ export default function Projects() {
   const [priority, setPriority] = useState<Priority>('normal');
   const [status, setStatus] = useState<'active' | 'inactive' | 'closed'>('active');
   const [remainingCount, setRemainingCount] = useState(0);
+  const [prohibitedListUrl, setProhibitedListUrl] = useState('');
 
   const fetchProjects = useCallback(async () => {
     setLoading(true);
@@ -70,7 +71,7 @@ export default function Projects() {
     setProjectNumber(''); setTitle(''); setCompanyName(''); setServiceName('');
     setServiceOverview(''); setProjectDetail(''); setAcquisitionConditions('');
     setUnitPrice(0); setSchedulingUrl(''); setIsUnlimited(false); setMaxAppts(0);
-    setPriority('normal'); setStatus('active');
+    setPriority('normal'); setStatus('active'); setProhibitedListUrl('');
     setShowDialog(true);
   };
 
@@ -90,6 +91,7 @@ export default function Projects() {
     setRemainingCount(p.is_unlimited ? 0 : p.max_appointments_total - p.confirmed_count);
     setPriority(p.priority || 'normal');
     setStatus(p.status);
+    setProhibitedListUrl((p as any).prohibited_list_url || '');
     setShowDialog(true);
   };
 
@@ -121,6 +123,7 @@ export default function Projects() {
         confirmed_count: newConfirmedCount,
         priority,
         status,
+        prohibited_list_url: prohibitedListUrl || null,
       };
 
       if (editProject) {
@@ -313,6 +316,13 @@ export default function Projects() {
             <div className="space-y-2">
               <Label>獲得条件</Label>
               <Textarea value={acquisitionConditions} onChange={(e) => setAcquisitionConditions(e.target.value)} placeholder="アポイント獲得の条件を記載" rows={3} />
+            </div>
+
+            {/* アプローチ禁止リスト */}
+            <div className="space-y-2">
+              <Label className="flex items-center gap-1">アプローチ禁止リスト（Googleシート） <ExternalLink className="w-3 h-3" /></Label>
+              <Input value={prohibitedListUrl} onChange={(e) => setProhibitedListUrl(e.target.value)} placeholder="https://docs.google.com/spreadsheets/d/..." />
+              <p className="text-xs text-muted-foreground">アプローチ禁止対象の企業一覧を記載したGoogleシートのURLを入力してください</p>
             </div>
 
             {/* Row: 案件単価 + 日程調整URL */}

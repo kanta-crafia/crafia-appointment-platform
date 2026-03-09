@@ -267,6 +267,7 @@ export default function PartnerAppointments() {
     pending: monthFiltered.filter(a => a.status === 'pending').length,
     approved: monthFiltered.filter(a => a.status === 'approved').length,
     rejected: monthFiltered.filter(a => a.status === 'rejected').length,
+    cancelled: monthFiltered.filter(a => a.status === 'cancelled').length,
   }), [monthFiltered]);
 
   const goToPrevMonth = () => setSelectedMonth(prev => subMonths(prev, 1));
@@ -325,6 +326,7 @@ export default function PartnerAppointments() {
           <TabsTrigger value="pending">保留中 ({statusCounts.pending})</TabsTrigger>
           <TabsTrigger value="approved">承認済 ({statusCounts.approved})</TabsTrigger>
           <TabsTrigger value="rejected">却下 ({statusCounts.rejected})</TabsTrigger>
+          <TabsTrigger value="cancelled">取消 ({statusCounts.cancelled})</TabsTrigger>
         </TabsList>
 
         <TabsContent value={tab} className="mt-4">

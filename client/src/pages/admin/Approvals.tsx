@@ -238,6 +238,7 @@ export default function Approvals() {
                     <TableHead>先方企業名</TableHead>
                     <TableHead>案件</TableHead>
                     <TableHead>登録企業</TableHead>
+                    <TableHead>獲得者名</TableHead>
                     <TableHead>商談日時</TableHead>
                     <TableHead>ステータス</TableHead>
                     <TableHead>登録日</TableHead>
@@ -250,6 +251,7 @@ export default function Approvals() {
                       <TableCell className="font-medium">{a.target_company_name}</TableCell>
                       <TableCell className="text-muted-foreground">{(a as any).project?.title}</TableCell>
                       <TableCell className="text-muted-foreground">{(a as any).organization?.name}</TableCell>
+                      <TableCell className="text-muted-foreground">{(a as any).acquirer_name || '—'}</TableCell>
                       <TableCell className="text-sm">{format(new Date(a.meeting_datetime), 'yyyy/MM/dd HH:mm')}</TableCell>
                       <TableCell><StatusBadge status={a.status} /></TableCell>
                       <TableCell className="text-sm text-muted-foreground">{format(new Date(a.created_at), 'MM/dd HH:mm')}</TableCell>
@@ -261,7 +263,7 @@ export default function Approvals() {
                     </TableRow>
                   ))}
                   {filtered.length === 0 && (
-                    <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">該当するアポイントがありません</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">該当するアポイントがありません</TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>
