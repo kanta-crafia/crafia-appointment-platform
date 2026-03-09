@@ -44,9 +44,9 @@ export default function AgencyStats() {
         supabase
           .from('appointments')
           .select('*, project:projects(title, project_number, company_name, unit_price), organization:organizations(name), creator:users!appointments_created_by_user_id_fkey(full_name, login_id)')
-          .gte('created_at', monthStart + 'T00:00:00')
-          .lte('created_at', monthEnd + 'T23:59:59')
-          .order('created_at', { ascending: false }),
+          .gte('meeting_datetime', monthStart + 'T00:00:00')
+          .lte('meeting_datetime', monthEnd + 'T23:59:59')
+          .order('meeting_datetime', { ascending: false }),
       ]);
 
       setOrgs(orgRes.data || []);
@@ -111,7 +111,7 @@ export default function AgencyStats() {
 
   return (
     <div>
-      <PageHeader title="代理店別アポ集計" description="代理店ごとの月次アポイント獲得状況を確認" />
+      <PageHeader title="代理店別アポ集計" description="商談日時ベースで代理店ごとの月次アポイント状況を確認" />
 
       {/* Month selector & filter */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-6">

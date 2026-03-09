@@ -137,3 +137,7 @@
 ## v1.9.2 バグ修正: アポイント削除ボタンが動作しない
 - [x] 削除が実行できない原因を調査・修正（RLSにDELETEポリシーがなかったため追加: partner_delete_own_pending_appointments）
 - [ ] GitHubプッシュ
+
+## v1.9.3 代理店別アポ集計を商談日時ベースの月別集計に修正
+- [x] 代理店別アポ集計を商談日時（meeting_datetime）で月別に分けて表示
+- [ ] GitHubプッシュ
