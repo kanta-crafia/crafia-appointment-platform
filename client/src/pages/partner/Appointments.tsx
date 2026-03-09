@@ -166,16 +166,23 @@ export default function PartnerAppointments() {
       // datetime-localの値をISO文字列に変換（TZ考慮）
       const meetingDateISO = new Date(editMeetingDatetime).toISOString();
 
+      // キャンセル済みアポの場合、ステータスを保留中に戻す
+      const updateData: any = {
+        target_company_name: editTargetCompany,
+        contact_person: editContactPerson,
+        meeting_datetime: meetingDateISO,
+        notes: editNotes || null,
+        acquisition_date: editAcquisitionDate || null,
+        acquirer_name: editAcquirerName || null,
+      };
+      if (editAppt.status === 'cancelled') {
+        updateData.status = 'pending';
+        changes.push('ステータスを保留中に戻しました（再承認が必要です）');
+      }
+
       const { error } = await supabase
         .from('appointments')
-        .update({
-          target_company_name: editTargetCompany,
-          contact_person: editContactPerson,
-          meeting_datetime: meetingDateISO,
-          notes: editNotes || null,
-          acquisition_date: editAcquisitionDate || null,
-          acquirer_name: editAcquirerName || null,
-        })
+        .update(updateData)
         .eq('id', editAppt.id);
 
       if (error) {
@@ -335,9 +342,10 @@ export default function PartnerAppointments() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>先方企業名</TableHead>
                     <TableHead>案件</TableHead>
+                    <TableHead>先方企業名</TableHead>
                     <TableHead>先方担当者名</TableHead>
+                    <TableHead>獲得者名</TableHead>
                     <TableHead>商談日時</TableHead>
                     <TableHead>ステータス</TableHead>
                     <TableHead>登録日</TableHead>
@@ -347,9 +355,10 @@ export default function PartnerAppointments() {
                 <TableBody>
                   {filtered.map((a) => (
                     <TableRow key={a.id} className="cursor-pointer hover:bg-muted/50" onClick={() => openDetail(a)}>
-                      <TableCell className="font-medium">{a.target_company_name}</TableCell>
-                      <TableCell className="text-muted-foreground">{(a as any).project?.title}</TableCell>
+                      <TableCell className="font-medium">{(a as any).project?.title || '—'} {(a as any).project?.project_number ? `(${(a as any).project.project_number})` : ''}</TableCell>
+                      <TableCell className="text-muted-foreground">{a.target_company_name}</TableCell>
                       <TableCell>{a.contact_person || '—'}</TableCell>
+                      <TableCell className="text-muted-foreground">{(a as any).acquirer_name || '—'}</TableCell>
                       <TableCell className="text-sm">{format(new Date(a.meeting_datetime), 'yyyy/MM/dd HH:mm')}</TableCell>
                       <TableCell><StatusBadge status={a.status} /></TableCell>
                       <TableCell className="text-sm text-muted-foreground">{format(new Date(a.created_at), 'MM/dd HH:mm')}</TableCell>
@@ -378,7 +387,7 @@ export default function PartnerAppointments() {
                               </Button>
                             </>
                           )}
-                          {a.status === 'approved' && (
+                          {a.status === 'approved' && user?.org_id === 'crafia' && (
                             <Button
                               variant="outline"
                               size="sm"
@@ -395,7 +404,7 @@ export default function PartnerAppointments() {
                   ))}
                   {filtered.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                      <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                         {format(selectedMonth, 'yyyy年M月', { locale: ja })}のアポイントがありません
                       </TableCell>
                     </TableRow>
@@ -486,7 +495,7 @@ export default function PartnerAppointments() {
                   </Button>
                 </div>
               )}
-              {selectedAppt.status === 'approved' && (
+              {selectedAppt.status === 'approved' && user?.org_id === 'crafia' && (
                 <div className="pt-2 border-t flex gap-2">
                   <Button
                     variant="outline"
@@ -496,6 +505,19 @@ export default function PartnerAppointments() {
                   >
                     <Pencil className="w-3.5 h-3.5" />
                     編集
+                  </Button>
+                </div>
+              )}
+              {selectedAppt.status === 'cancelled' && (
+                <div className="pt-2 border-t flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5"
+                    onClick={(e) => openEditDialog(selectedAppt, e)}
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                    日程修正して再承認を申請
                   </Button>
                 </div>
               )}

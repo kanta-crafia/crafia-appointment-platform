@@ -235,8 +235,8 @@ export default function Approvals() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>先方企業名</TableHead>
                     <TableHead>案件</TableHead>
+                    <TableHead>先方企業名</TableHead>
                     <TableHead>登録企業</TableHead>
                     <TableHead>獲得者名</TableHead>
                     <TableHead>商談日時</TableHead>
@@ -248,8 +248,8 @@ export default function Approvals() {
                 <TableBody>
                   {filtered.map((a) => (
                     <TableRow key={a.id} className="cursor-pointer hover:bg-muted/50" onClick={() => openDetail(a)}>
-                      <TableCell className="font-medium">{a.target_company_name}</TableCell>
-                      <TableCell className="text-muted-foreground">{(a as any).project?.title}</TableCell>
+                      <TableCell className="font-medium">{(a as any).project?.title || '—'} {(a as any).project?.project_number ? `(${(a as any).project.project_number})` : ''}</TableCell>
+                      <TableCell className="text-muted-foreground">{a.target_company_name}</TableCell>
                       <TableCell className="text-muted-foreground">{(a as any).organization?.name}</TableCell>
                       <TableCell className="text-muted-foreground">{(a as any).acquirer_name || '—'}</TableCell>
                       <TableCell className="text-sm">{format(new Date(a.meeting_datetime), 'yyyy/MM/dd HH:mm')}</TableCell>
@@ -351,7 +351,7 @@ export default function Approvals() {
                 </Button>
               </>
             )}
-            {selectedAppt?.status === 'approved' && (
+            {selectedAppt?.status === 'approved' && user?.org_id === 'crafia' && (
               <>
                 <Button variant="outline" onClick={() => openEditDialog(selectedAppt)} disabled={processing} className="gap-1.5">
                   <Pencil className="w-4 h-4" /> 編集
@@ -360,6 +360,11 @@ export default function Approvals() {
                   <Ban className="w-4 h-4 mr-1" /> 取消
                 </Button>
               </>
+            )}
+            {selectedAppt?.status === 'approved' && user?.org_id !== 'crafia' && (
+              <Button variant="outline" onClick={() => handleCancel(selectedAppt)} disabled={processing} className="text-gray-600">
+                <Ban className="w-4 h-4 mr-1" /> 取消
+              </Button>
             )}
           </DialogFooter>
         </DialogContent>
