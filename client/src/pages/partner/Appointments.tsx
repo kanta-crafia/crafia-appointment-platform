@@ -376,6 +376,17 @@ export default function PartnerAppointments() {
                               </Button>
                             </>
                           )}
+                          {a.status === 'approved' && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 text-xs gap-1"
+                              onClick={(e) => openEditDialog(a, e)}
+                            >
+                              <Pencil className="w-3 h-3" />
+                              編集
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -470,6 +481,19 @@ export default function PartnerAppointments() {
                   >
                     <Send className="w-3.5 h-3.5" />
                     {requestingApproval === selectedAppt.id ? '送信中...' : '承認再要求メールを送信'}
+                  </Button>
+                </div>
+              )}
+              {selectedAppt.status === 'approved' && (
+                <div className="pt-2 border-t flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5"
+                    onClick={(e) => openEditDialog(selectedAppt, e)}
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                    編集
                   </Button>
                 </div>
               )}

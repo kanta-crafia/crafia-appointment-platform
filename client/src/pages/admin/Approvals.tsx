@@ -10,9 +10,10 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { CheckCircle, XCircle, Ban } from 'lucide-react';
+import { CheckCircle, XCircle, Ban, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
+import { Input } from '@/components/ui/input';
 
 export default function Approvals() {
   const { user } = useAuth();
@@ -23,6 +24,13 @@ export default function Approvals() {
   const [selectedAppt, setSelectedAppt] = useState<Appointment | null>(null);
   const [reason, setReason] = useState('');
   const [processing, setProcessing] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
+  const [editAppt, setEditAppt] = useState<Appointment | null>(null);
+  const [editTargetCompany, setEditTargetCompany] = useState('');
+  const [editContactPerson, setEditContactPerson] = useState('');
+  const [editMeetingDatetime, setEditMeetingDatetime] = useState('');
+  const [editNotes, setEditNotes] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const fetchAppointments = useCallback(async () => {
     setLoading(true);
@@ -94,6 +102,103 @@ export default function Approvals() {
       toast.success('アポイントを取消しました');
       setShowDetail(false);
       fetchAppointments();
+    }
+  };
+
+  // 編集ダイアログを開く
+  const openEditDialog = (appt: Appointment) => {
+    setEditAppt(appt);
+    setEditTargetCompany(appt.target_company_name);
+    setEditContactPerson(appt.contact_person || '');
+    setEditMeetingDatetime(toLocalDatetimeString(appt.meeting_datetime));
+    setEditNotes(appt.notes || '');
+    setShowEdit(true);
+  };
+
+  // datetime-local用のローカル形式に変換
+  function toLocalDatetimeString(utcString: string): string {
+    const d = new Date(utcString);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const hours = String(d.getHours()).padStart(2, '0');
+    const minutes = String(d.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  }
+
+  // 編集を保存
+  const handleSaveEdit = async () => {
+    if (!editAppt) return;
+    if (!editTargetCompany || !editContactPerson || !editMeetingDatetime) {
+      toast.error('必須項目を入力してください');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      // 変更内容を検出
+      const changes: string[] = [];
+      if (editTargetCompany !== editAppt.target_company_name) changes.push(`先方企業名: ${editAppt.target_company_name} → ${editTargetCompany}`);
+      if (editContactPerson !== (editAppt.contact_person || '')) changes.push(`先方担当者名: ${editAppt.contact_person || '—'} → ${editContactPerson}`);
+      const origLocal = toLocalDatetimeString(editAppt.meeting_datetime);
+      if (editMeetingDatetime !== origLocal) changes.push(`商談日時: ${format(new Date(editAppt.meeting_datetime), 'yyyy/MM/dd HH:mm')} → ${format(new Date(editMeetingDatetime), 'yyyy/MM/dd HH:mm')}`);
+      if (editNotes !== (editAppt.notes || '')) changes.push('メモを変更');
+
+      if (changes.length === 0) {
+        toast.info('変更はありません');
+        setSaving(false);
+        return;
+      }
+
+      // datetime-localの値をISO文字列に変換（TZ考慮）
+      const meetingDateISO = new Date(editMeetingDatetime).toISOString();
+
+      const { error } = await supabase
+        .from('appointments')
+        .update({
+          target_company_name: editTargetCompany,
+          contact_person: editContactPerson,
+          meeting_datetime: meetingDateISO,
+          notes: editNotes || null,
+        })
+        .eq('id', editAppt.id);
+
+      if (error) {
+        toast.error('更新に失敗しました', { description: error.message });
+        return;
+      }
+
+      // メール通知を送信
+      try {
+        const projectTitle = (editAppt as any).project?.title || '案件';
+        const orgName = (editAppt as any).organization?.name || 'パートナー';
+        await fetch('/api/email/appointment-edit-admin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            partnerName: orgName,
+            projectTitle,
+            targetCompany: editTargetCompany,
+            contactPerson: editContactPerson,
+            meetingDatetime: meetingDateISO,
+            notes: editNotes,
+            appointmentId: editAppt.id,
+            changes: changes.join('、'),
+          }),
+        });
+      } catch (emailErr) {
+        console.warn('Edit notification email failed:', emailErr);
+      }
+
+      toast.success('アポイントを更新しました');
+      setShowEdit(false);
+      setShowDetail(false);
+      await fetchAppointments();
+    } catch (e) {
+      console.error('Edit error:', e);
+      toast.error('更新中にエラーが発生しました');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -245,10 +350,52 @@ export default function Approvals() {
               </>
             )}
             {selectedAppt?.status === 'approved' && (
-              <Button variant="outline" onClick={() => handleCancel(selectedAppt)} disabled={processing} className="text-gray-600">
-                <Ban className="w-4 h-4 mr-1" /> 取消
-              </Button>
+              <>
+                <Button variant="outline" onClick={() => openEditDialog(selectedAppt)} disabled={processing} className="gap-1.5">
+                  <Pencil className="w-4 h-4" /> 編集
+                </Button>
+                <Button variant="outline" onClick={() => handleCancel(selectedAppt)} disabled={processing} className="text-gray-600">
+                  <Ban className="w-4 h-4 mr-1" /> 取消
+                </Button>
+              </>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Dialog */}
+      <Dialog open={showEdit} onOpenChange={setShowEdit}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>アポイント編集</DialogTitle>
+          </DialogHeader>
+          {editAppt && (
+            <div className="space-y-4 py-2">
+              <div className="space-y-2">
+                <Label>先方企業名 <span className="text-destructive">*</span></Label>
+                <Input value={editTargetCompany} onChange={(e) => setEditTargetCompany(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>先方担当者名 <span className="text-destructive">*</span></Label>
+                <Input value={editContactPerson} onChange={(e) => setEditContactPerson(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>商談日時 <span className="text-destructive">*</span></Label>
+                <Input type="datetime-local" value={editMeetingDatetime} onChange={(e) => setEditMeetingDatetime(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>メモ</Label>
+                <Textarea value={editNotes} onChange={(e) => setEditNotes(e.target.value)} placeholder="メモを入力..." rows={2} />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEdit(false)} disabled={saving}>
+              キャンセル
+            </Button>
+            <Button onClick={handleSaveEdit} disabled={saving} className="bg-emerald-600 hover:bg-emerald-700">
+              {saving ? '保存中...' : '保存'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

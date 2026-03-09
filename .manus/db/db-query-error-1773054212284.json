@@ -1,0 +1,14 @@
+{
+  "query": "\nINSERT INTO appointments (\n  id, project_id, organization_id, created_by_user_id,\n  target_company_name, contact_person, meeting_datetime,\n  status, notes, acquisition_date, acquirer_name, created_at, updated_at\n) \nSELECT\n  'test-pending-' || substr(hex(randomblob(8)), 1, 16),\n  (SELECT id FROM projects LIMIT 1),\n  (SELECT id FROM organizations WHERE role = 'partner' LIMIT 1),\n  (SELECT id FROM users WHERE role = 'partner' LIMIT 1),\n  'テスト先方企業',\n  'テスト担当者',\n  datetime('now', '+1 day'),\n  'pending',\n  'テストメモ',\n  date('now'),\n  'テスト獲得者',\n  datetime('now'),\n  datetime('now');\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3XnG4b7Nz2zs3sV.root --database e2zSqZTPJkUs8xTu63WAYC --execute \nINSERT INTO appointments (\n  id, project_id, organization_id, created_by_user_id,\n  target_company_name, contact_person, meeting_datetime,\n  status, notes, acquisition_date, acquirer_name, created_at, updated_at\n) \nSELECT\n  'test-pending-' || substr(hex(randomblob(8)), 1, 16),\n  (SELECT id FROM projects LIMIT 1),\n  (SELECT id FROM organizations WHERE role = 'partner' LIMIT 1),\n  (SELECT id FROM users WHERE role = 'partner' LIMIT 1),\n  'テスト先方企業',\n  'テスト担当者',\n  datetime('now', '+1 day'),\n  'pending',\n  'テストメモ',\n  date('now'),\n  'テスト獲得者',\n  datetime('now'),\n  datetime('now');\n",
+  "returncode": 1,
+  "logs": [
+    "ERROR 1064 (42000) at line 2: You have an error in your SQL syntax; check the manual that corresponds to your TiDB version for the right syntax to use line 13 column 12 near \"('now', '+1 day'),",
+    "  'pending',",
+    "  'テストメモ',",
+    "  date('now'),",
+    "  'テスト獲得者',",
+    "  datetime('now'),",
+    "  datetime('now')\""
+  ]
+}
