@@ -131,6 +131,8 @@ export default function NewAppointment() {
     }
 
     setSaving(true);
+    // datetime-localの値をDateオブジェクト経由でISO文字列に変換（ブラウザのTZを考慮）
+    const meetingDateISO = new Date(meetingDatetime).toISOString();
     const { error } = await supabase.from('appointments').insert({
       project_id: selectedAlloc.project_id,
       allocation_id: allocationId,
@@ -138,7 +140,7 @@ export default function NewAppointment() {
       org_id: user?.org_id,
       target_company_name: targetCompany,
       contact_person: contactPerson,
-      meeting_datetime: meetingDatetime,
+      meeting_datetime: meetingDateISO,
       notes: notes,
       acquisition_date: acquisitionDate,
       acquirer_name: acquirerName,

@@ -5,14 +5,28 @@ import { PageHeader } from '@/components/PageHeader';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Link } from 'wouter';
-import { Plus, Send, ChevronLeft, ChevronRight } from 'lucide-react';
-import { format, startOfMonth, endOfMonth, addMonths, subMonths, isSameMonth } from 'date-fns';
+import { Plus, Send, ChevronLeft, ChevronRight, Pencil } from 'lucide-react';
+import { format, addMonths, subMonths, isSameMonth } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import { toast } from 'sonner';
+
+// UTCのtimestamp文字列をdatetime-local用のローカル形式に変換
+function toLocalDatetimeString(utcString: string): string {
+  const d = new Date(utcString);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  const hours = String(d.getHours()).padStart(2, '0');
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
 
 export default function PartnerAppointments() {
   const { user } = useAuth();
@@ -23,6 +37,17 @@ export default function PartnerAppointments() {
   const [selectedAppt, setSelectedAppt] = useState<Appointment | null>(null);
   const [requestingApproval, setRequestingApproval] = useState<string | null>(null);
   const [selectedMonth, setSelectedMonth] = useState(() => new Date());
+
+  // 編集用state
+  const [showEdit, setShowEdit] = useState(false);
+  const [editAppt, setEditAppt] = useState<Appointment | null>(null);
+  const [editTargetCompany, setEditTargetCompany] = useState('');
+  const [editContactPerson, setEditContactPerson] = useState('');
+  const [editMeetingDatetime, setEditMeetingDatetime] = useState('');
+  const [editNotes, setEditNotes] = useState('');
+  const [editAcquisitionDate, setEditAcquisitionDate] = useState('');
+  const [editAcquirerName, setEditAcquirerName] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const fetchAppointments = useCallback(async () => {
     if (!user) {
@@ -93,6 +118,101 @@ export default function PartnerAppointments() {
       toast.error('承認要求の送信に失敗しました');
     } finally {
       setRequestingApproval(null);
+    }
+  };
+
+  // 編集ダイアログを開く
+  const openEditDialog = (appt: Appointment, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditAppt(appt);
+    setEditTargetCompany(appt.target_company_name);
+    setEditContactPerson(appt.contact_person || '');
+    setEditMeetingDatetime(toLocalDatetimeString(appt.meeting_datetime));
+    setEditNotes(appt.notes || '');
+    setEditAcquisitionDate((appt as any).acquisition_date || '');
+    setEditAcquirerName((appt as any).acquirer_name || '');
+    setShowEdit(true);
+  };
+
+  // 編集を保存
+  const handleSaveEdit = async () => {
+    if (!editAppt) return;
+    if (!editTargetCompany || !editContactPerson || !editMeetingDatetime) {
+      toast.error('必須項目を入力してください');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      // 変更内容を検出
+      const changes: string[] = [];
+      if (editTargetCompany !== editAppt.target_company_name) changes.push(`先方企業名: ${editAppt.target_company_name} → ${editTargetCompany}`);
+      if (editContactPerson !== (editAppt.contact_person || '')) changes.push(`先方担当者名: ${editAppt.contact_person || '—'} → ${editContactPerson}`);
+      const origLocal = toLocalDatetimeString(editAppt.meeting_datetime);
+      if (editMeetingDatetime !== origLocal) changes.push(`商談日時: ${format(new Date(editAppt.meeting_datetime), 'yyyy/MM/dd HH:mm')} → ${format(new Date(editMeetingDatetime), 'yyyy/MM/dd HH:mm')}`);
+      if (editNotes !== (editAppt.notes || '')) changes.push('メモを変更');
+      if (editAcquisitionDate !== ((editAppt as any).acquisition_date || '')) changes.push(`獲得日を変更`);
+      if (editAcquirerName !== ((editAppt as any).acquirer_name || '')) changes.push(`獲得者名: ${(editAppt as any).acquirer_name || '—'} → ${editAcquirerName}`);
+
+      if (changes.length === 0) {
+        toast.info('変更はありません');
+        setSaving(false);
+        return;
+      }
+
+      // datetime-localの値をISO文字列に変換（TZ考慮）
+      const meetingDateISO = new Date(editMeetingDatetime).toISOString();
+
+      const { error } = await supabase
+        .from('appointments')
+        .update({
+          target_company_name: editTargetCompany,
+          contact_person: editContactPerson,
+          meeting_datetime: meetingDateISO,
+          notes: editNotes || null,
+          acquisition_date: editAcquisitionDate || null,
+          acquirer_name: editAcquirerName || null,
+        })
+        .eq('id', editAppt.id);
+
+      if (error) {
+        toast.error('更新に失敗しました', { description: error.message });
+        return;
+      }
+
+      // メール通知を送信
+      try {
+        const partnerName = await getPartnerOrgName();
+        const projectTitle = (editAppt as any).project?.title || '案件';
+        await fetch('/api/email/appointment-edit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            partnerName,
+            projectTitle,
+            targetCompany: editTargetCompany,
+            contactPerson: editContactPerson,
+            meetingDatetime: meetingDateISO,
+            notes: editNotes,
+            acquisitionDate: editAcquisitionDate,
+            acquirerName: editAcquirerName,
+            appointmentId: editAppt.id,
+            changes: changes.join('、'),
+          }),
+        });
+      } catch (emailErr) {
+        console.warn('Edit notification email failed:', emailErr);
+      }
+
+      toast.success('アポイントを更新しました');
+      setShowEdit(false);
+      setShowDetail(false);
+      await fetchAppointments();
+    } catch (e) {
+      console.error('Edit error:', e);
+      toast.error('更新中にエラーが発生しました');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -187,7 +307,7 @@ export default function PartnerAppointments() {
                     <TableHead>商談日時</TableHead>
                     <TableHead>ステータス</TableHead>
                     <TableHead>登録日</TableHead>
-                    <TableHead className="w-[100px]">操作</TableHead>
+                    <TableHead className="w-[140px]">操作</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -200,18 +320,31 @@ export default function PartnerAppointments() {
                       <TableCell><StatusBadge status={a.status} /></TableCell>
                       <TableCell className="text-sm text-muted-foreground">{format(new Date(a.created_at), 'MM/dd HH:mm')}</TableCell>
                       <TableCell>
-                        {a.status === 'pending' && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-7 text-xs gap-1"
-                            disabled={requestingApproval === a.id}
-                            onClick={(e) => handleRequestApproval(a, e)}
-                          >
-                            <Send className="w-3 h-3" />
-                            {requestingApproval === a.id ? '送信中...' : '承認再要求'}
-                          </Button>
-                        )}
+                        <div className="flex gap-1">
+                          {a.status === 'pending' && (
+                            <>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7 text-xs gap-1"
+                                onClick={(e) => openEditDialog(a, e)}
+                              >
+                                <Pencil className="w-3 h-3" />
+                                編集
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7 text-xs gap-1"
+                                disabled={requestingApproval === a.id}
+                                onClick={(e) => handleRequestApproval(a, e)}
+                              >
+                                <Send className="w-3 h-3" />
+                                {requestingApproval === a.id ? '送信中' : '再要求'}
+                              </Button>
+                            </>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -229,6 +362,7 @@ export default function PartnerAppointments() {
         </TabsContent>
       </Tabs>
 
+      {/* 詳細ダイアログ */}
       <Dialog open={showDetail} onOpenChange={setShowDetail}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
@@ -285,7 +419,16 @@ export default function PartnerAppointments() {
                 </div>
               )}
               {selectedAppt.status === 'pending' && (
-                <div className="pt-2 border-t">
+                <div className="pt-2 border-t flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5"
+                    onClick={(e) => openEditDialog(selectedAppt, e)}
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                    編集
+                  </Button>
                   <Button
                     variant="outline"
                     size="sm"
@@ -300,6 +443,51 @@ export default function PartnerAppointments() {
               )}
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* 編集ダイアログ */}
+      <Dialog open={showEdit} onOpenChange={setShowEdit}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>アポイント編集</DialogTitle>
+          </DialogHeader>
+          {editAppt && (
+            <div className="space-y-4 py-2">
+              <div className="space-y-2">
+                <Label>先方企業名 <span className="text-destructive">*</span></Label>
+                <Input value={editTargetCompany} onChange={(e) => setEditTargetCompany(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>先方担当者名 <span className="text-destructive">*</span></Label>
+                <Input value={editContactPerson} onChange={(e) => setEditContactPerson(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>商談日時 <span className="text-destructive">*</span></Label>
+                <Input type="datetime-local" value={editMeetingDatetime} onChange={(e) => setEditMeetingDatetime(e.target.value)} />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>獲得日</Label>
+                  <Input type="date" value={editAcquisitionDate} onChange={(e) => setEditAcquisitionDate(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label>獲得者名</Label>
+                  <Input value={editAcquirerName} onChange={(e) => setEditAcquirerName(e.target.value)} />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>メモ</Label>
+                <Textarea value={editNotes} onChange={(e) => setEditNotes(e.target.value)} rows={3} />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEdit(false)} disabled={saving}>キャンセル</Button>
+            <Button onClick={handleSaveEdit} disabled={saving}>
+              {saving ? '保存中...' : '保存する'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
