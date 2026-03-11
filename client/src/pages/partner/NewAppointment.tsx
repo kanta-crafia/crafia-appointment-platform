@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { Link } from 'wouter';
@@ -23,6 +24,7 @@ export default function NewAppointment() {
   const [allocations, setAllocations] = useState<Allocation[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [showDuplicateDialog, setShowDuplicateDialog] = useState(false);
 
   // Form
   const [allocationId, setAllocationId] = useState(preselectedAllocationId);
@@ -111,51 +113,13 @@ export default function NewAppointment() {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!allocationId || !targetCompany || !contactPerson || !meetingDatetime || !acquisitionDate || !acquirerName || !notes) {
-      toast.error('必須項目を入力してください');
-      return;
-    }
-    if (!selectedAlloc) {
-      toast.error('割り当てを選択してください');
-      return;
-    }
-
-    // Check project limit
-    if (selectedProject && !selectedProject.is_unlimited) {
-      const remaining = selectedProject.max_appointments_total - selectedProject.confirmed_count;
-      if (remaining <= 0) {
-        toast.error('この案件の上限に達しています');
-        return;
-      }
-    }
-
-    // Check for duplicate target company in the same project
-    try {
-      const { data: existingAppts } = await supabase
-        .from('appointments')
-        .select('id')
-        .eq('project_id', selectedAlloc.project_id)
-        .eq('target_company_name', targetCompany)
-        .neq('status', 'rejected')
-        .neq('status', 'cancelled');
-      
-      if (existingAppts && existingAppts.length > 0) {
-        toast.error('この案件に同じ先方企業名のアポイントが既に存在します');
-        return;
-      }
-    } catch (checkError) {
-      console.error('Duplicate check error:', checkError);
-      toast.error('重複チェック中にエラーが発生しました');
-      return;
-    }
-
+  // 実際のINSERT処理（重複確認後も呼ばれる）
+  const doInsert = async () => {
     setSaving(true);
     // datetime-localの値をDateオブジェクト経由でISO文字列に変換（ブラウザの TZを考慮）
     const meetingDateISO = new Date(meetingDatetime).toISOString();
     const { error } = await supabase.from('appointments').insert({
-      project_id: selectedAlloc.project_id,
+      project_id: selectedAlloc!.project_id,
       allocation_id: allocationId,
       created_by_user_id: user?.id,
       org_id: user?.org_id,
@@ -181,6 +145,50 @@ export default function NewAppointment() {
       toast.success('アポイントを登録しました', { description: '承認待ちの状態です' });
       navigate('/appointments');
     }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!allocationId || !targetCompany || !contactPerson || !meetingDatetime || !acquisitionDate || !acquirerName || !notes) {
+      toast.error('必須項目を入力してください');
+      return;
+    }
+    if (!selectedAlloc) {
+      toast.error('割り当てを選択してください');
+      return;
+    }
+
+    // Check project limit
+    if (selectedProject && !selectedProject.is_unlimited) {
+      const remaining = selectedProject.max_appointments_total - selectedProject.confirmed_count;
+      if (remaining <= 0) {
+        toast.error('この案件の上限に達しています');
+        return;
+      }
+    }
+
+    // Check for duplicate target company in the same project (confirmation only, not blocking)
+    try {
+      const { data: existingAppts } = await supabase
+        .from('appointments')
+        .select('id')
+        .eq('project_id', selectedAlloc.project_id)
+        .eq('target_company_name', targetCompany)
+        .neq('status', 'rejected')
+        .neq('status', 'cancelled');
+      
+      if (existingAppts && existingAppts.length > 0) {
+        // 重複がある場合は確認ダイアログを表示（登録はブロックしない）
+        setShowDuplicateDialog(true);
+        return;
+      }
+    } catch (checkError) {
+      console.error('Duplicate check error:', checkError);
+      // 重複チェックでエラーが出ても登録自体はブロックしない
+    }
+
+    // 重複なし → そのまま登録
+    await doInsert();
   };
 
   if (loading) {
@@ -262,13 +270,13 @@ export default function NewAppointment() {
               <Select value={acquiredCompanyName} onValueChange={setAcquiredCompanyName}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="client">クライエント名</SelectItem>
+                  <SelectItem value="client">クライアント名</SelectItem>
                   <SelectItem value="crafia">Crafia名乗り</SelectItem>
                   <SelectItem value="self">自己着座</SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">※着座いただく方が認識をされている会社名の入力をお願いします。</p>
-              <p className="text-xs text-muted-foreground">※自己着座の場合、株式会Crafia名乗りでアポ取得された形となります。</p>
+              <p className="text-xs text-muted-foreground">※自己着座の場合、株式会社Crafia名乗りでアポ取得された形となります。</p>
             </div>
 
             <div className="space-y-2">
@@ -285,6 +293,27 @@ export default function NewAppointment() {
           </form>
         </CardContent>
       </Card>
+
+      {/* 重複確認ダイアログ */}
+      <AlertDialog open={showDuplicateDialog} onOpenChange={setShowDuplicateDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>先方企業名が重複しています</AlertDialogTitle>
+            <AlertDialogDescription>
+              この案件に「{targetCompany}」と同じ先方企業名のアポイントが既に登録されています。このまま登録してもよろしいですか？
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>キャンセル</AlertDialogCancel>
+            <AlertDialogAction onClick={async () => {
+              setShowDuplicateDialog(false);
+              await doInsert();
+            }}>
+              登録する
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
