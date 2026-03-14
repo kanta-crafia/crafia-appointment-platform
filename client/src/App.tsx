@@ -22,6 +22,7 @@ import PartnerDashboard from "./pages/partner/PartnerDashboard";
 import MyAllocations from "./pages/partner/MyAllocations";
 import NewAppointment from "./pages/partner/NewAppointment";
 import PartnerAppointments from "./pages/partner/Appointments";
+import SubPartnerManagement from "./pages/partner/SubPartnerManagement";
 
 // Shared pages
 import Notifications from "./pages/Notifications";
@@ -55,6 +56,7 @@ function AuthenticatedRoutes() {
         <Route path="/my-allocations" component={MyAllocations} />
         <Route path="/appointments/new" component={NewAppointment} />
         <Route path="/appointments" component={PartnerAppointments} />
+        <Route path="/sub-partners" component={SubPartnerManagement} />
         <Route path="/notifications" component={Notifications} />
         <Route component={NotFound} />
       </Switch>

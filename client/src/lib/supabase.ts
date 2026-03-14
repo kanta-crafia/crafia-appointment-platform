@@ -150,6 +150,25 @@ export interface SnsAccount {
   assigned_user?: User;
 }
 
+export interface SubPartnerPayment {
+  id: string;
+  parent_org_id: string;
+  sub_org_id: string;
+  period: string;
+  appointment_count: number;
+  approved_count: number;
+  unit_price: number;
+  total_amount: number;
+  status: 'unpaid' | 'paid' | 'partial';
+  paid_amount: number;
+  paid_at: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  // Joined fields
+  sub_org?: Organization;
+}
+
 export interface AuditLog {
   id: number;
   actor_user_id: string | null;

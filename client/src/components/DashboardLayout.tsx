@@ -3,7 +3,7 @@ import { Link, useLocation } from 'wouter';
 import { cn } from '@/lib/utils';
 import {
   Building2, LayoutDashboard, Briefcase, GitBranch, ClipboardCheck,
-  Bell, LogOut, ChevronLeft, ChevronRight, FileText, BarChart3, Menu, PieChart, Share2
+  Bell, LogOut, ChevronLeft, ChevronRight, FileText, BarChart3, Menu, PieChart, Share2, Users
 } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
 import { APP_VERSION } from '@shared/version';
@@ -25,6 +25,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [hasSubOrgs, setHasSubOrgs] = useState(false);
 
   const fetchUnread = useCallback(async () => {
     if (!user) return;
@@ -39,6 +40,20 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       console.error('Notification count fetch error:', e);
     }
   }, [user]);
+
+  // Check if current partner has sub-organizations
+  useEffect(() => {
+    if (!user || isAdmin) return;
+    const checkSubOrgs = async () => {
+      const { count } = await supabase
+        .from('organizations')
+        .select('*', { count: 'exact', head: true })
+        .eq('parent_org_id', user.org_id)
+        .eq('status', 'active');
+      setHasSubOrgs((count || 0) > 0);
+    };
+    checkSubOrgs();
+  }, [user, isAdmin]);
 
   useEffect(() => {
     fetchUnread();
@@ -63,6 +78,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { label: '割り当て案件', href: '/my-allocations', icon: Briefcase },
     { label: 'アポ登録', href: '/appointments/new', icon: ClipboardCheck },
     { label: 'アポ一覧', href: '/appointments', icon: FileText },
+    ...(hasSubOrgs ? [{ label: '二次代理店管理', href: '/sub-partners', icon: Users }] : []),
     { label: '通知', href: '/notifications', icon: Bell, badge: unreadCount },
   ];
 
