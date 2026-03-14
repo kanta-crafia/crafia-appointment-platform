@@ -68,7 +68,13 @@ export default function MyAllocations() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {allocations.map((a) => {
+              {allocations
+                .filter((a) => {
+                  // 「終了」案件は一覧から完全に非表示
+                  const project = (a as any).project as Project | undefined;
+                  return project?.status !== 'closed';
+                })
+                .map((a) => {
                 const project = (a as any).project as Project | undefined;
                 const isUnlimited = project?.is_unlimited;
                 const maxTotal = project?.max_appointments_total || 0;
@@ -77,6 +83,8 @@ export default function MyAllocations() {
                 const isFull = !isUnlimited && remaining !== null && remaining <= 0;
                 const isActive = a.status === 'active';
                 const projectActive = project?.status === 'active';
+                const projectInactive = project?.status === 'inactive';
+                // 「無効」案件はアポ登録不可（上限到達と同じ扱い）
                 const canRegister = isActive && projectActive && !isFull;
                 return (
                   <TableRow key={a.id}>
@@ -113,9 +121,9 @@ export default function MyAllocations() {
                           </Link>
                         ) : (
                           <>
-                            {isFull && <span className="text-xs text-muted-foreground">上限到達</span>}
-                            {!isActive && <span className="text-xs text-muted-foreground">無効</span>}
-                            {isActive && !projectActive && <span className="text-xs text-muted-foreground">案件停止中</span>}
+                            {isFull && !projectInactive && <span className="text-xs text-muted-foreground">上限到達</span>}
+                            {projectInactive && <span className="text-xs text-muted-foreground">受付停止中</span>}
+                            {!isActive && !projectInactive && <span className="text-xs text-muted-foreground">無効</span>}
                           </>
                         )}
                       </div>
@@ -123,7 +131,10 @@ export default function MyAllocations() {
                   </TableRow>
                 );
               })}
-              {allocations.length === 0 && (
+              {allocations.filter((a) => {
+                const project = (a as any).project as Project | undefined;
+                return project?.status !== 'closed';
+              }).length === 0 && (
                 <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">割り当てられた案件がありません</TableCell></TableRow>
               )}
             </TableBody>

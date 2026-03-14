@@ -158,6 +158,16 @@ export default function NewAppointment() {
       return;
     }
 
+    // Check project status
+    if (selectedProject?.status === 'inactive') {
+      toast.error('この案件は現在受付停止中です');
+      return;
+    }
+    if (selectedProject?.status === 'closed') {
+      toast.error('この案件は終了しています');
+      return;
+    }
+
     // Check project limit
     if (selectedProject && !selectedProject.is_unlimited) {
       const remaining = selectedProject.max_appointments_total - selectedProject.confirmed_count;
@@ -215,15 +225,24 @@ export default function NewAppointment() {
               <Select value={allocationId} onValueChange={setAllocationId}>
                 <SelectTrigger><SelectValue placeholder="案件を選択" /></SelectTrigger>
                 <SelectContent>
-                  {allocations.map(a => {
+                  {allocations
+                    .filter(a => {
+                      // 「終了」案件はプルダウンから完全に非表示
+                      const proj = (a as any).project;
+                      return proj?.status !== 'closed';
+                    })
+                    .map(a => {
                     const proj = (a as any).project;
                     const isUnlimited = proj?.is_unlimited;
                     const remaining = isUnlimited ? null : (proj?.max_appointments_total || 0) - (proj?.confirmed_count || 0);
                     const isFull = !isUnlimited && remaining !== null && remaining <= 0;
+                    const projectInactive = proj?.status === 'inactive';
                     const projectNumber = proj?.project_number ? `[${proj.project_number}] ` : '';
+                    // 「無効」案件または上限到達の場合は選択不可
+                    const isDisabled = isFull || projectInactive;
                     return (
-                      <SelectItem key={a.id} value={a.id} disabled={isFull}>
-                        {projectNumber}{proj?.title}{isUnlimited ? '' : ` (残${remaining}件)`}{isFull ? ' — 上限到達' : ''}
+                      <SelectItem key={a.id} value={a.id} disabled={isDisabled}>
+                        {projectNumber}{proj?.title}{isUnlimited ? '' : ` (残${remaining}件)`}{isFull ? ' — 上限到達' : ''}{projectInactive ? ' — 受付停止中' : ''}
                       </SelectItem>
                     );
                   })}

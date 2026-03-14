@@ -35,9 +35,14 @@ export default function PartnerDashboard() {
 
   const pendingCount = appointments.filter(a => a.status === 'pending').length;
   const approvedCount = appointments.filter(a => a.status === 'approved').length;
+  // 「終了」案件を除いた有効な割り当て数
+  const activeAllocations = allocations.filter(a => {
+    const proj = (a as any).project;
+    return proj?.status !== 'closed';
+  });
 
   const statCards = [
-    { label: '割り当て案件', value: allocations.length, sub: '有効な案件数', icon: Briefcase, color: 'text-blue-600 bg-blue-50' },
+    { label: '割り当て案件', value: activeAllocations.length, sub: '有効な案件数', icon: Briefcase, color: 'text-blue-600 bg-blue-50' },
     { label: '承認済アポ', value: approvedCount, sub: '自社獲得分', icon: TrendingUp, color: 'text-emerald-600 bg-emerald-50' },
     { label: '承認待ち', value: pendingCount, sub: '確認中', icon: Clock, color: 'text-amber-600 bg-amber-50' },
     { label: '合計登録数', value: appointments.length, sub: '全ステータス', icon: ClipboardCheck, color: 'text-violet-600 bg-violet-50' },
@@ -76,11 +81,11 @@ export default function PartnerDashboard() {
           <CardTitle className="text-base font-semibold">案件別進捗</CardTitle>
         </CardHeader>
         <CardContent>
-          {allocations.length === 0 ? (
+          {activeAllocations.length === 0 ? (
             <p className="text-sm text-muted-foreground py-4 text-center">割り当てられた案件がありません</p>
           ) : (
             <div className="space-y-4">
-              {allocations.map((a) => {
+              {activeAllocations.map((a) => {
                 const proj = (a as any).project;
                 const isUnlimited = proj?.is_unlimited;
                 const maxTotal = proj?.max_appointments_total || 0;
