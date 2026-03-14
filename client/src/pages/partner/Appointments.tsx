@@ -52,6 +52,8 @@ export default function PartnerAppointments() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
+  const [childOrgNames, setChildOrgNames] = useState<Record<string, string>>({});
+
   const fetchAppointments = useCallback(async () => {
     if (!user) {
       setLoading(false);
@@ -59,10 +61,23 @@ export default function PartnerAppointments() {
     }
     setLoading(true);
     try {
+      // 自組織の子組織（二次代理店）を取得
+      const { data: childOrgs } = await supabase
+        .from('organizations')
+        .select('id, name')
+        .eq('parent_org_id', user.org_id);
+
+      const childOrgIds = (childOrgs || []).map(o => o.id);
+      const orgNameMap: Record<string, string> = {};
+      (childOrgs || []).forEach(o => { orgNameMap[o.id] = o.name; });
+      setChildOrgNames(orgNameMap);
+
+      // 自組織 + 子組織のアポを取得
+      const allOrgIds = [user.org_id, ...childOrgIds];
       const { data } = await supabase
         .from('appointments')
-        .select('*, project:projects(title, project_number)')
-        .eq('org_id', user.org_id)
+        .select('*, project:projects(title, project_number), organization:organizations(name)')
+        .in('org_id', allOrgIds)
         .order('created_at', { ascending: false });
       setAppointments(data || []);
     } catch (e) {
@@ -387,6 +402,7 @@ export default function PartnerAppointments() {
                     <TableHead>先方企業名</TableHead>
                     <TableHead>先方担当者名</TableHead>
                     <TableHead>獲得者名</TableHead>
+                    <TableHead>登録企業</TableHead>
                     <TableHead>商談日時</TableHead>
                     <TableHead>ステータス</TableHead>
                     <TableHead>登録日</TableHead>
@@ -400,12 +416,21 @@ export default function PartnerAppointments() {
                       <TableCell className="text-muted-foreground">{a.target_company_name}</TableCell>
                       <TableCell>{a.contact_person || '—'}</TableCell>
                       <TableCell className="text-muted-foreground">{(a as any).acquirer_name || '—'}</TableCell>
+                      <TableCell>
+                        {a.org_id !== user?.org_id ? (
+                          <span className="text-xs font-medium px-2 py-0.5 rounded bg-purple-100 text-purple-700">
+                            {(a as any).organization?.name || childOrgNames[a.org_id] || '二次代理店'}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">自社</span>
+                        )}
+                      </TableCell>
                       <TableCell className="text-sm">{format(new Date(a.meeting_datetime), 'yyyy/MM/dd HH:mm')}</TableCell>
                       <TableCell><StatusBadge status={a.status} /></TableCell>
                       <TableCell className="text-sm text-muted-foreground">{format(new Date(a.created_at), 'MM/dd HH:mm')}</TableCell>
                       <TableCell>
                         <div className="flex gap-1">
-                          {a.status === 'pending' && (
+                          {a.status === 'pending' && a.org_id === user?.org_id && (
                             <>
                               <Button
                                 variant="outline"
@@ -445,7 +470,7 @@ export default function PartnerAppointments() {
                   ))}
                   {filtered.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                      <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
                         {format(selectedMonth, 'yyyy年M月', { locale: ja })}のアポイントがありません
                       </TableCell>
                     </TableRow>

@@ -54,6 +54,7 @@ export interface User {
   email: string | null;
   role: UserRole;
   status: 'active' | 'inactive';
+  plain_password: string | null;
   created_at: string;
 }
 

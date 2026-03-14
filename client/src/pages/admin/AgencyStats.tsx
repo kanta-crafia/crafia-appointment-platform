@@ -8,18 +8,39 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { BarChart3, TrendingUp, ChevronLeft, ChevronRight, ExternalLink, Eye } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { BarChart3, TrendingUp, ChevronLeft, ChevronRight, ExternalLink, Eye, ChevronDown, ChevronUp, Building2 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, subMonths, addMonths } from 'date-fns';
 import { ja } from 'date-fns/locale';
 
-interface AgencyMonthlyData {
-  org: Organization;
+interface OrgStats {
   total: number;
   approved: number;
   pending: number;
   rejected: number;
   cancelled: number;
   appointments: Appointment[];
+}
+
+interface AgencyMonthlyData {
+  org: Organization;
+  // 自社のみの数値
+  own: OrgStats;
+  // 二次代理店の数値
+  children: { org: Organization; stats: OrgStats }[];
+  // 合算（自社 + 二次代理店）
+  combined: OrgStats;
+}
+
+function calcStats(appts: Appointment[]): OrgStats {
+  return {
+    total: appts.length,
+    approved: appts.filter(a => a.status === 'approved').length,
+    pending: appts.filter(a => a.status === 'pending').length,
+    rejected: appts.filter(a => a.status === 'rejected').length,
+    cancelled: appts.filter(a => a.status === 'cancelled').length,
+    appointments: appts,
+  };
 }
 
 export default function AgencyStats() {
@@ -32,6 +53,7 @@ export default function AgencyStats() {
   const [selectedAppt, setSelectedAppt] = useState<Appointment | null>(null);
   const [showApptDetail, setShowApptDetail] = useState(false);
   const [filterOrg, setFilterOrg] = useState('all');
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -60,28 +82,63 @@ export default function AgencyStats() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  // 一次代理店のみ（parent_org_idがないか、Crafia本部を親に持つ）を取得
+  const primaryOrgs = useMemo(() => {
+    // Crafia本部のIDを特定
+    const crafiaOrg = orgs.find(o => o.name === 'Crafia本部');
+    const crafiaId = crafiaOrg?.id;
+    // 一次代理店 = parent_org_idがCrafia本部のもの
+    return orgs.filter(o => o.parent_org_id === crafiaId);
+  }, [orgs]);
+
+  // 二次代理店のマップ: parent_org_id -> Organization[]
+  const childOrgsMap = useMemo(() => {
+    const map: Record<string, Organization[]> = {};
+    for (const org of orgs) {
+      if (org.parent_org_id && primaryOrgs.some(p => p.id === org.parent_org_id)) {
+        if (!map[org.parent_org_id]) map[org.parent_org_id] = [];
+        map[org.parent_org_id].push(org);
+      }
+    }
+    return map;
+  }, [orgs, primaryOrgs]);
+
   const agencyData = useMemo(() => {
     const result: AgencyMonthlyData[] = [];
-    const targetOrgs = filterOrg === 'all' ? orgs : orgs.filter(o => o.id === filterOrg);
+    const targetOrgs = filterOrg === 'all' ? primaryOrgs : primaryOrgs.filter(o => o.id === filterOrg);
 
     for (const org of targetOrgs) {
-      const orgAppts = appointments.filter(a => a.org_id === org.id);
-      if (orgAppts.length === 0 && filterOrg === 'all') continue; // Show only orgs with data when showing all
+      // 自社のアポ
+      const ownAppts = appointments.filter(a => a.org_id === org.id);
+      const ownStats = calcStats(ownAppts);
+
+      // 二次代理店のアポ
+      const childOrgs = childOrgsMap[org.id] || [];
+      const children: { org: Organization; stats: OrgStats }[] = [];
+      let allAppts = [...ownAppts];
+
+      for (const child of childOrgs) {
+        const childAppts = appointments.filter(a => a.org_id === child.id);
+        if (childAppts.length > 0 || filterOrg !== 'all') {
+          children.push({ org: child, stats: calcStats(childAppts) });
+        }
+        allAppts = [...allAppts, ...childAppts];
+      }
+
+      const combinedStats = calcStats(allAppts);
+
+      if (combinedStats.total === 0 && filterOrg === 'all') continue;
       result.push({
         org,
-        total: orgAppts.length,
-        approved: orgAppts.filter(a => a.status === 'approved').length,
-        pending: orgAppts.filter(a => a.status === 'pending').length,
-        rejected: orgAppts.filter(a => a.status === 'rejected').length,
-        cancelled: orgAppts.filter(a => a.status === 'cancelled').length,
-        appointments: orgAppts,
+        own: ownStats,
+        children,
+        combined: combinedStats,
       });
     }
 
-    // Sort by total descending
-    result.sort((a, b) => b.total - a.total);
+    result.sort((a, b) => b.combined.total - a.combined.total);
     return result;
-  }, [orgs, appointments, filterOrg]);
+  }, [primaryOrgs, appointments, filterOrg, childOrgsMap]);
 
   const totalStats = useMemo(() => ({
     total: appointments.length,
@@ -94,6 +151,15 @@ export default function AgencyStats() {
   const prevMonth = () => setCurrentMonth(subMonths(currentMonth, 1));
   const nextMonth = () => setCurrentMonth(addMonths(currentMonth, 1));
   const monthLabel = format(currentMonth, 'yyyy年M月', { locale: ja });
+
+  const toggleExpand = (orgId: string) => {
+    setExpandedRows(prev => {
+      const next = new Set(prev);
+      if (next.has(orgId)) next.delete(orgId);
+      else next.add(orgId);
+      return next;
+    });
+  };
 
   const openAgencyDetail = (agency: AgencyMonthlyData) => {
     setSelectedAgency(agency);
@@ -132,7 +198,7 @@ export default function AgencyStats() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">全企業</SelectItem>
-              {orgs.map(o => (
+              {primaryOrgs.map(o => (
                 <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>
               ))}
             </SelectContent>
@@ -180,6 +246,9 @@ export default function AgencyStats() {
           <CardTitle className="text-base font-semibold flex items-center gap-2">
             <BarChart3 className="w-4 h-4" />
             代理店別集計（{monthLabel}）
+            <span className="text-xs font-normal text-muted-foreground ml-2">
+              ※ 一次代理店の数値は二次代理店分を含む合算値です
+            </span>
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
@@ -198,50 +267,121 @@ export default function AgencyStats() {
             </TableHeader>
             <TableBody>
               {agencyData.map((agency) => {
-                const approvalRate = agency.total > 0
-                  ? Math.round((agency.approved / agency.total) * 100)
+                const approvalRate = agency.combined.total > 0
+                  ? Math.round((agency.combined.approved / agency.combined.total) * 100)
                   : 0;
+                const hasChildren = agency.children.length > 0;
+                const isExpanded = expandedRows.has(agency.org.id);
+
                 return (
-                  <TableRow key={agency.org.id} className="hover:bg-muted/50">
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-primary shrink-0" />
-                        <span className="font-medium">{agency.org.name}</span>
-                        <StatusBadge status={agency.org.status} />
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <span className="text-lg font-bold">{agency.total}</span>
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">{agency.approved}</Badge>
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">{agency.pending}</Badge>
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">{agency.rejected}</Badge>
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <Badge variant="outline" className="bg-gray-50 text-gray-600 border-gray-200">{agency.cancelled}</Badge>
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <div className="flex items-center justify-center gap-1.5">
-                        <div className="w-16 h-2 bg-muted rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-emerald-500 rounded-full transition-all"
-                            style={{ width: `${approvalRate}%` }}
-                          />
+                  <>
+                    <TableRow key={agency.org.id} className="hover:bg-muted/50">
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          {hasChildren ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 w-6 p-0 shrink-0"
+                              onClick={() => toggleExpand(agency.org.id)}
+                            >
+                              {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                            </Button>
+                          ) : (
+                            <div className="w-6 shrink-0" />
+                          )}
+                          <div className="w-2 h-2 rounded-full bg-primary shrink-0" />
+                          <span className="font-medium">{agency.org.name}</span>
+                          <StatusBadge status={agency.org.status} />
+                          {hasChildren && (
+                            <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                              +{agency.children.length}社
+                            </span>
+                          )}
                         </div>
-                        <span className="text-xs text-muted-foreground w-8">{approvalRate}%</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button variant="ghost" size="sm" onClick={() => openAgencyDetail(agency)}>
-                        <Eye className="w-3.5 h-3.5 mr-1" /> 詳細
-                      </Button>
-                    </TableCell>
-                  </TableRow>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <span className="text-lg font-bold">{agency.combined.total}</span>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">{agency.combined.approved}</Badge>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">{agency.combined.pending}</Badge>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">{agency.combined.rejected}</Badge>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Badge variant="outline" className="bg-gray-50 text-gray-600 border-gray-200">{agency.combined.cancelled}</Badge>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <div className="w-16 h-2 bg-muted rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-emerald-500 rounded-full transition-all"
+                              style={{ width: `${approvalRate}%` }}
+                            />
+                          </div>
+                          <span className="text-xs text-muted-foreground w-8">{approvalRate}%</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button variant="ghost" size="sm" onClick={() => openAgencyDetail(agency)}>
+                          <Eye className="w-3.5 h-3.5 mr-1" /> 詳細
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+
+                    {/* 二次代理店の内訳行 */}
+                    {hasChildren && isExpanded && (
+                      <>
+                        {/* 一次代理店自社分 */}
+                        <TableRow key={`${agency.org.id}_own`} className="bg-blue-50/30">
+                          <TableCell>
+                            <div className="flex items-center gap-2 pl-10">
+                              <div className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />
+                              <span className="text-sm text-blue-700 font-medium">{agency.org.name}（自社分）</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-center text-sm font-semibold">{agency.own.total}</TableCell>
+                          <TableCell className="text-center"><span className="text-xs text-emerald-600">{agency.own.approved}</span></TableCell>
+                          <TableCell className="text-center"><span className="text-xs text-amber-600">{agency.own.pending}</span></TableCell>
+                          <TableCell className="text-center"><span className="text-xs text-red-600">{agency.own.rejected}</span></TableCell>
+                          <TableCell className="text-center"><span className="text-xs text-gray-500">{agency.own.cancelled}</span></TableCell>
+                          <TableCell />
+                          <TableCell />
+                        </TableRow>
+                        {/* 各二次代理店 */}
+                        {agency.children.map((child) => {
+                          const childRate = child.stats.total > 0
+                            ? Math.round((child.stats.approved / child.stats.total) * 100)
+                            : 0;
+                          return (
+                            <TableRow key={child.org.id} className="bg-purple-50/30">
+                              <TableCell>
+                                <div className="flex items-center gap-2 pl-10">
+                                  <div className="w-1.5 h-1.5 rounded-full bg-purple-500 shrink-0" />
+                                  <Building2 className="w-3.5 h-3.5 text-purple-500" />
+                                  <span className="text-sm text-purple-700 font-medium">{child.org.name}</span>
+                                  <span className="text-xs text-purple-400">（二次代理店）</span>
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-center text-sm font-semibold">{child.stats.total}</TableCell>
+                              <TableCell className="text-center"><span className="text-xs text-emerald-600">{child.stats.approved}</span></TableCell>
+                              <TableCell className="text-center"><span className="text-xs text-amber-600">{child.stats.pending}</span></TableCell>
+                              <TableCell className="text-center"><span className="text-xs text-red-600">{child.stats.rejected}</span></TableCell>
+                              <TableCell className="text-center"><span className="text-xs text-gray-500">{child.stats.cancelled}</span></TableCell>
+                              <TableCell className="text-center">
+                                <span className="text-xs text-muted-foreground">{childRate}%</span>
+                              </TableCell>
+                              <TableCell />
+                            </TableRow>
+                          );
+                        })}
+                      </>
+                    )}
+                  </>
                 );
               })}
               {agencyData.length === 0 && (
@@ -267,72 +407,79 @@ export default function AgencyStats() {
           </DialogHeader>
           {selectedAgency && (
             <div>
-              {/* Mini stats */}
+              {/* Mini stats (合算) */}
               <div className="grid grid-cols-5 gap-2 mb-4">
                 <div className="text-center p-2 bg-muted/50 rounded-md">
-                  <p className="text-xs text-muted-foreground">合計</p>
-                  <p className="text-lg font-bold">{selectedAgency.total}</p>
+                  <p className="text-xs text-muted-foreground">合計（合算）</p>
+                  <p className="text-lg font-bold">{selectedAgency.combined.total}</p>
                 </div>
                 <div className="text-center p-2 bg-emerald-50 rounded-md">
                   <p className="text-xs text-emerald-600">承認済</p>
-                  <p className="text-lg font-bold text-emerald-700">{selectedAgency.approved}</p>
+                  <p className="text-lg font-bold text-emerald-700">{selectedAgency.combined.approved}</p>
                 </div>
                 <div className="text-center p-2 bg-amber-50 rounded-md">
                   <p className="text-xs text-amber-600">保留中</p>
-                  <p className="text-lg font-bold text-amber-700">{selectedAgency.pending}</p>
+                  <p className="text-lg font-bold text-amber-700">{selectedAgency.combined.pending}</p>
                 </div>
                 <div className="text-center p-2 bg-red-50 rounded-md">
                   <p className="text-xs text-red-600">却下</p>
-                  <p className="text-lg font-bold text-red-700">{selectedAgency.rejected}</p>
+                  <p className="text-lg font-bold text-red-700">{selectedAgency.combined.rejected}</p>
                 </div>
                 <div className="text-center p-2 bg-gray-50 rounded-md">
                   <p className="text-xs text-gray-500">取消</p>
-                  <p className="text-lg font-bold text-gray-600">{selectedAgency.cancelled}</p>
+                  <p className="text-lg font-bold text-gray-600">{selectedAgency.combined.cancelled}</p>
                 </div>
               </div>
 
-              {/* Appointments table */}
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>対象企業</TableHead>
-                    <TableHead>案件</TableHead>
-                    <TableHead>登録者</TableHead>
-                    <TableHead>商談日時</TableHead>
-                    <TableHead>ステータス</TableHead>
-                    <TableHead className="text-right">操作</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {selectedAgency.appointments.map((appt) => (
-                    <TableRow key={appt.id} className="hover:bg-muted/30">
-                      <TableCell className="font-medium">{appt.target_company_name}</TableCell>
-                      <TableCell className="text-muted-foreground text-sm">
-                        {(appt as any).project?.title || '—'}
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {(appt as any).creator?.full_name || (appt as any).creator?.login_id || '—'}
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {format(new Date(appt.meeting_datetime), 'MM/dd HH:mm')}
-                      </TableCell>
-                      <TableCell><StatusBadge status={appt.status} /></TableCell>
-                      <TableCell className="text-right">
-                        <Button variant="ghost" size="sm" onClick={() => openApptDetail(appt)}>
-                          詳細
-                        </Button>
-                      </TableCell>
-                    </TableRow>
+              {/* 内訳（二次代理店がある場合） */}
+              {selectedAgency.children.length > 0 && (
+                <div className="mb-4 p-3 bg-muted/30 rounded-lg border">
+                  <p className="text-xs font-semibold text-muted-foreground mb-2">内訳</p>
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between text-sm">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-blue-500" />
+                        <span className="font-medium">{selectedAgency.org.name}（自社分）</span>
+                      </div>
+                      <span className="font-bold">{selectedAgency.own.total}件</span>
+                    </div>
+                    {selectedAgency.children.map(child => (
+                      <div key={child.org.id} className="flex items-center justify-between text-sm">
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full bg-purple-500" />
+                          <span className="font-medium text-purple-700">{child.org.name}（二次代理店）</span>
+                        </div>
+                        <span className="font-bold">{child.stats.total}件</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Tabs: 全て / 自社 / 二次代理店別 */}
+              <Tabs defaultValue="all">
+                <TabsList className="mb-3">
+                  <TabsTrigger value="all">全て ({selectedAgency.combined.total})</TabsTrigger>
+                  <TabsTrigger value="own">{selectedAgency.org.name} ({selectedAgency.own.total})</TabsTrigger>
+                  {selectedAgency.children.map(child => (
+                    <TabsTrigger key={child.org.id} value={child.org.id}>
+                      {child.org.name} ({child.stats.total})
+                    </TabsTrigger>
                   ))}
-                  {selectedAgency.appointments.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                        アポイントがありません
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+                </TabsList>
+
+                <TabsContent value="all">
+                  <AppointmentTable appointments={selectedAgency.combined.appointments} orgs={orgs} onDetail={openApptDetail} />
+                </TabsContent>
+                <TabsContent value="own">
+                  <AppointmentTable appointments={selectedAgency.own.appointments} orgs={orgs} onDetail={openApptDetail} />
+                </TabsContent>
+                {selectedAgency.children.map(child => (
+                  <TabsContent key={child.org.id} value={child.org.id}>
+                    <AppointmentTable appointments={child.stats.appointments} orgs={orgs} onDetail={openApptDetail} />
+                  </TabsContent>
+                ))}
+              </Tabs>
             </div>
           )}
         </DialogContent>
@@ -415,5 +562,60 @@ export default function AgencyStats() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+// 共通のアポイントテーブルコンポーネント
+function AppointmentTable({ appointments, orgs, onDetail }: { appointments: Appointment[]; orgs: Organization[]; onDetail: (a: Appointment) => void }) {
+  const getOrgName = (orgId: string) => orgs.find(o => o.id === orgId)?.name || '—';
+
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>対象企業</TableHead>
+          <TableHead>案件</TableHead>
+          <TableHead>登録企業</TableHead>
+          <TableHead>登録者</TableHead>
+          <TableHead>商談日時</TableHead>
+          <TableHead>ステータス</TableHead>
+          <TableHead className="text-right">操作</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {appointments.map((appt) => (
+          <TableRow key={appt.id} className="hover:bg-muted/30">
+            <TableCell className="font-medium">{appt.target_company_name}</TableCell>
+            <TableCell className="text-muted-foreground text-sm">
+              {(appt as any).project?.title || '—'}
+            </TableCell>
+            <TableCell className="text-sm">
+              <span className="text-xs font-medium px-1.5 py-0.5 rounded bg-muted">
+                {(appt as any).organization?.name || getOrgName(appt.org_id)}
+              </span>
+            </TableCell>
+            <TableCell className="text-sm">
+              {(appt as any).creator?.full_name || (appt as any).creator?.login_id || '—'}
+            </TableCell>
+            <TableCell className="text-sm">
+              {format(new Date(appt.meeting_datetime), 'MM/dd HH:mm')}
+            </TableCell>
+            <TableCell><StatusBadge status={appt.status} /></TableCell>
+            <TableCell className="text-right">
+              <Button variant="ghost" size="sm" onClick={() => onDetail(appt)}>
+                詳細
+              </Button>
+            </TableCell>
+          </TableRow>
+        ))}
+        {appointments.length === 0 && (
+          <TableRow>
+            <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+              アポイントがありません
+            </TableCell>
+          </TableRow>
+        )}
+      </TableBody>
+    </Table>
   );
 }

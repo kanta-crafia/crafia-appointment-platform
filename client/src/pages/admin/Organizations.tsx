@@ -365,6 +365,7 @@ export default function Organizations() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>ユーザーID</TableHead>
+                    <TableHead>パスワード</TableHead>
                     <TableHead>氏名</TableHead>
                     <TableHead>所属企業</TableHead>
                     <TableHead>ロール</TableHead>
@@ -390,6 +391,24 @@ export default function Organizations() {
                             </Button>
                           )}
                         </div>
+                      </TableCell>
+                      <TableCell>
+                        {user.plain_password ? (
+                          <div className="flex items-center gap-2">
+                            <code className="text-sm bg-muted px-2 py-0.5 rounded font-mono">{user.plain_password}</code>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 w-6 p-0"
+                              onClick={() => copyToClipboard(user.plain_password!, user.id + '_pw')}
+                              title="コピー"
+                            >
+                              {copiedId === user.id + '_pw' ? <Check className="w-3 h-3 text-green-600" /> : <Copy className="w-3 h-3" />}
+                            </Button>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">未記録</span>
+                        )}
                       </TableCell>
                       <TableCell className="font-medium">{user.full_name || '—'}</TableCell>
                       <TableCell className="text-muted-foreground">{getOrgName(user.org_id)}</TableCell>
@@ -419,7 +438,7 @@ export default function Organizations() {
                     </TableRow>
                   ))}
                   {users.length === 0 && (
-                    <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">ユーザーがまだ登録されていません</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">ユーザーがまだ登録されていません</TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>
