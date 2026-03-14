@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { supabase, type Allocation, type Organization, type Project } from '@/lib/supabase';
 import { PageHeader } from '@/components/PageHeader';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -8,9 +8,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Pencil } from 'lucide-react';
+import { Plus, Pencil, Trash2, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { toast } from 'sonner';
+
+type SortField = 'project' | 'parent_org' | 'child_org' | 'created_at';
+type SortDir = 'asc' | 'desc';
 
 export default function Allocations() {
   const [allocations, setAllocations] = useState<Allocation[]>([]);
@@ -20,6 +24,15 @@ export default function Allocations() {
   const [showDialog, setShowDialog] = useState(false);
   const [editAlloc, setEditAlloc] = useState<Allocation | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // Sort state
+  const [sortField, setSortField] = useState<SortField>('created_at');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
+
+  // Delete state
+  const [deleteTarget, setDeleteTarget] = useState<Allocation | null>(null);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   // Form
   const [projectId, setProjectId] = useState('');
@@ -34,7 +47,7 @@ export default function Allocations() {
       const [allocRes, orgRes, projRes] = await Promise.all([
         supabase.from('allocations').select('*, project:projects(*), parent_org:organizations!allocations_parent_org_id_fkey(name), child_org:organizations!allocations_child_org_id_fkey(name)').order('created_at', { ascending: false }),
         supabase.from('organizations').select('*').eq('status', 'active').order('name'),
-        supabase.from('projects').select('*').eq('status', 'active').order('title'),
+        supabase.from('projects').select('*').eq('status', 'active').order('project_number', { ascending: true }),
       ]);
       setAllocations(allocRes.data || []);
       setOrgs(orgRes.data || []);
@@ -47,6 +60,57 @@ export default function Allocations() {
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // Sorted allocations
+  const sortedAllocations = useMemo(() => {
+    const sorted = [...allocations];
+    sorted.sort((a, b) => {
+      let valA = '';
+      let valB = '';
+
+      switch (sortField) {
+        case 'project': {
+          const projA = (a as any).project;
+          const projB = (b as any).project;
+          valA = projA?.project_number || projA?.title || '';
+          valB = projB?.project_number || projB?.title || '';
+          break;
+        }
+        case 'parent_org':
+          valA = (a as any).parent_org?.name || '';
+          valB = (b as any).parent_org?.name || '';
+          break;
+        case 'child_org':
+          valA = (a as any).child_org?.name || '';
+          valB = (b as any).child_org?.name || '';
+          break;
+        case 'created_at':
+          valA = a.created_at || '';
+          valB = b.created_at || '';
+          break;
+      }
+
+      const cmp = valA.localeCompare(valB, 'ja');
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+    return sorted;
+  }, [allocations, sortField, sortDir]);
+
+  const toggleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDir(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDir('asc');
+    }
+  };
+
+  const SortIcon = ({ field }: { field: SortField }) => {
+    if (sortField !== field) return <ArrowUpDown className="w-3.5 h-3.5 ml-1 text-muted-foreground/50" />;
+    return sortDir === 'asc'
+      ? <ArrowUp className="w-3.5 h-3.5 ml-1 text-primary" />
+      : <ArrowDown className="w-3.5 h-3.5 ml-1 text-primary" />;
+  };
 
   const openCreate = () => {
     setEditAlloc(null);
@@ -91,6 +155,45 @@ export default function Allocations() {
     fetchData();
   };
 
+  const openDelete = (a: Allocation) => {
+    setDeleteTarget(a);
+    setShowDeleteDialog(true);
+  };
+
+  const handleDelete = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      // まず関連するアポイントがあるか確認
+      const { data: relatedAppts } = await supabase
+        .from('appointments')
+        .select('id')
+        .eq('allocation_id', deleteTarget.id)
+        .limit(1);
+
+      if (relatedAppts && relatedAppts.length > 0) {
+        toast.error('この割り当てに関連するアポイントが存在するため削除できません。先にアポイントを削除してください。');
+        setDeleting(false);
+        setShowDeleteDialog(false);
+        return;
+      }
+
+      const { error } = await supabase.from('allocations').delete().eq('id', deleteTarget.id);
+      if (error) {
+        toast.error('削除に失敗しました', { description: error.message });
+      } else {
+        toast.success('割り当てを削除しました');
+        setShowDeleteDialog(false);
+        fetchData();
+      }
+    } catch (e) {
+      toast.error('削除中にエラーが発生しました');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   // Get project info for display
   const getProjectInfo = (a: Allocation) => {
     const proj = (a as any).project;
@@ -114,9 +217,21 @@ export default function Allocations() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>案件</TableHead>
-                <TableHead>卸元（親企業）</TableHead>
-                <TableHead>卸先（代理店）</TableHead>
+                <TableHead>
+                  <button className="flex items-center hover:text-primary transition-colors" onClick={() => toggleSort('project')}>
+                    案件 <SortIcon field="project" />
+                  </button>
+                </TableHead>
+                <TableHead>
+                  <button className="flex items-center hover:text-primary transition-colors" onClick={() => toggleSort('parent_org')}>
+                    卸元（親企業）<SortIcon field="parent_org" />
+                  </button>
+                </TableHead>
+                <TableHead>
+                  <button className="flex items-center hover:text-primary transition-colors" onClick={() => toggleSort('child_org')}>
+                    卸先（代理店）<SortIcon field="child_org" />
+                  </button>
+                </TableHead>
                 <TableHead className="text-right">卸単価</TableHead>
                 <TableHead className="text-center">案件上限</TableHead>
                 <TableHead className="text-center">案件確定</TableHead>
@@ -126,14 +241,16 @@ export default function Allocations() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {allocations.map((a) => {
+              {sortedAllocations.map((a) => {
                 const proj = getProjectInfo(a);
                 const isUnlimited = proj?.is_unlimited;
                 const maxTotal = proj?.max_appointments_total || 0;
                 const confirmed = proj?.confirmed_count || 0;
                 return (
                   <TableRow key={a.id}>
-                    <TableCell className="font-medium">{proj?.title || '—'}</TableCell>
+                    <TableCell className="font-medium">
+                      {proj?.project_number ? `[${proj.project_number}] ` : ''}{proj?.title || '—'}
+                    </TableCell>
                     <TableCell>{(a as any).parent_org?.name || '—'}</TableCell>
                     <TableCell>{(a as any).child_org?.name || '—'}</TableCell>
                     <TableCell className="text-right font-mono">¥{Number(a.payout_per_appointment).toLocaleString()}</TableCell>
@@ -142,9 +259,14 @@ export default function Allocations() {
                     <TableCell className="text-center">{isUnlimited ? '—' : maxTotal - confirmed}</TableCell>
                     <TableCell><StatusBadge status={a.status} /></TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="sm" onClick={() => openEdit(a)}>
-                        <Pencil className="w-3.5 h-3.5" />
-                      </Button>
+                      <div className="flex items-center justify-end gap-1">
+                        <Button variant="ghost" size="sm" onClick={() => openEdit(a)}>
+                          <Pencil className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => openDelete(a)}>
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 );
@@ -157,6 +279,7 @@ export default function Allocations() {
         </CardContent>
       </Card>
 
+      {/* Create/Edit Dialog */}
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
@@ -169,11 +292,17 @@ export default function Allocations() {
               <Select value={projectId} onValueChange={setProjectId}>
                 <SelectTrigger><SelectValue placeholder="案件を選択" /></SelectTrigger>
                 <SelectContent>
-                  {projects.map(p => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.project_number ? `[${p.project_number}] ` : ''}{p.title}
-                    </SelectItem>
-                  ))}
+                  {projects
+                    .sort((a, b) => {
+                      const numA = parseInt(a.project_number || '999', 10);
+                      const numB = parseInt(b.project_number || '999', 10);
+                      return numA - numB;
+                    })
+                    .map(p => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.project_number ? `[${p.project_number}] ` : ''}{p.title}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
             </div>
@@ -225,6 +354,35 @@ export default function Allocations() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>割り当てを削除しますか？</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteTarget && (
+                <>
+                  <span className="font-medium">{(deleteTarget as any).project?.title || '案件'}</span>
+                  {' → '}
+                  <span className="font-medium">{(deleteTarget as any).child_org?.name || '代理店'}</span>
+                  {' の割り当てを削除します。この操作は取り消せません。'}
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>キャンセル</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting ? '削除中...' : '削除する'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
