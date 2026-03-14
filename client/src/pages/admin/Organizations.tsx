@@ -55,6 +55,8 @@ export default function Organizations() {
   const [editRole, setEditRole] = useState('');
   const [editOrgId, setEditOrgId] = useState('');
   const [editStatus, setEditStatus] = useState('');
+  const [editPassword, setEditPassword] = useState('');
+  const [showEditPassword, setShowEditPassword] = useState(false);
 
 
   const [showPassword, setShowPassword] = useState(false);
@@ -168,6 +170,11 @@ export default function Organizations() {
   const handleUpdateUser = async () => {
     if (!editUser) return;
     setSaving(true);
+    if (editPassword && editPassword.length < 6) {
+      toast.error('パスワードは6文字以上にしてください');
+      setSaving(false);
+      return;
+    }
     const { data, error } = await supabase.rpc('admin_update_user', {
       p_user_id: editUser.id,
       p_login_id: editLoginId || null,
@@ -176,6 +183,7 @@ export default function Organizations() {
       p_role: editRole || null,
       p_org_id: editOrgId || null,
       p_status: editStatus || null,
+      p_password: editPassword || null,
     });
     setSaving(false);
     if (error) { toast.error('更新に失敗しました', { description: error.message }); return; }
@@ -268,6 +276,8 @@ export default function Organizations() {
     setEditRole(user.role);
     setEditOrgId(user.org_id);
     setEditStatus(user.status);
+    setEditPassword('');
+    setShowEditPassword(false);
     setShowUserEditDialog(true);
   };
 
@@ -610,6 +620,27 @@ export default function Organizations() {
                     <SelectItem value="inactive">無効</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>パスワード変更</Label>
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Input
+                      type={showEditPassword ? 'text' : 'password'}
+                      value={editPassword}
+                      onChange={(e) => setEditPassword(e.target.value)}
+                      placeholder="変更する場合のみ入力（6文字以上）"
+                    />
+                    <Button type="button" variant="ghost" size="sm" className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0" onClick={() => setShowEditPassword(!showEditPassword)}>
+                      {showEditPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    </Button>
+                  </div>
+                  <Button type="button" variant="outline" size="sm" onClick={() => setEditPassword(generatePassword())}>自動生成</Button>
+                </div>
+                <p className="text-xs text-muted-foreground">空欄の場合、パスワードは変更されません</p>
+                {editUser?.plain_password && (
+                  <p className="text-xs text-muted-foreground">現在のパスワード: <code className="bg-muted px-1 py-0.5 rounded font-mono">{editUser.plain_password}</code></p>
+                )}
               </div>
             </div>
           )}
