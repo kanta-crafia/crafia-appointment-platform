@@ -4,35 +4,35 @@ import { PageHeader } from '@/components/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Pencil, Save, Building2, ChevronDown, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 
-interface OrgWithChildren extends Organization {
-  children: Organization[];
+interface PartnerWithSubs {
+  partner: Organization;       // 一次代理店（useful等）
+  subPartners: Organization[]; // 二次代理店（大藏、Resta等）
 }
 
 interface PriceEntry {
   allocationId: string;
   projectTitle: string;
   projectNumber: string;
-  parentPayout: number;
-  subPrice: number | null; // null = 親の単価を継承
+  parentPayout: number;       // 一次代理店への卸単価
+  subPrice: number | null;    // null = 未設定（一次代理店の卸単価と同額）
   subPriceId: string | null;
 }
 
 export default function SubAllocationPrices() {
-  const [parentOrgs, setParentOrgs] = useState<OrgWithChildren[]>([]);
+  const [partnerGroups, setPartnerGroups] = useState<PartnerWithSubs[]>([]);
   const [allAllocations, setAllAllocations] = useState<Allocation[]>([]);
   const [allSubPrices, setAllSubPrices] = useState<SubAllocationPrice[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Editing state
   const [editingOrg, setEditingOrg] = useState<Organization | null>(null);
+  const [editingParentId, setEditingParentId] = useState<string>('');
   const [editingPrices, setEditingPrices] = useState<PriceEntry[]>([]);
   const [showDialog, setShowDialog] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -51,31 +51,32 @@ export default function SubAllocationPrices() {
         .order('name');
       const orgs = orgsData || [];
 
-      // 親子関係を構築（子を持つ組織のみ表示）
+      // 組織マップを作成
       const orgMap = new Map<string, Organization>();
       orgs.forEach(o => orgMap.set(o.id, o));
 
-      const parentMap = new Map<string, OrgWithChildren>();
-      orgs.forEach(o => {
-        if (o.parent_org_id && orgMap.has(o.parent_org_id)) {
-          const parent = orgMap.get(o.parent_org_id)!;
-          if (!parentMap.has(parent.id)) {
-            parentMap.set(parent.id, { ...parent, children: [] });
-          }
-          parentMap.get(parent.id)!.children.push(o);
-        }
-      });
+      // Crafia本部を特定（parent_org_idがnullの組織）
+      const crafiaOrg = orgs.find(o => !o.parent_org_id);
 
-      // Crafia本部の直接の子のみ（一次代理店）をparentOrgsとする
-      // Crafia本部を見つける
-      const crafiaOrg = orgs.find(o => !o.parent_org_id || o.name === 'Crafia本部');
-      const relevantParents: OrgWithChildren[] = [];
-      parentMap.forEach((parent) => {
-        if (parent.children.length > 0) {
-          relevantParents.push(parent);
+      // 一次代理店 = Crafia本部の直接の子
+      // 二次代理店 = 一次代理店の子
+      const groups: PartnerWithSubs[] = [];
+
+      if (crafiaOrg) {
+        const firstTierPartners = orgs.filter(o => o.parent_org_id === crafiaOrg.id);
+        
+        for (const partner of firstTierPartners) {
+          const subPartners = orgs.filter(o => o.parent_org_id === partner.id);
+          if (subPartners.length > 0) {
+            groups.push({
+              partner,
+              subPartners,
+            });
+          }
         }
-      });
-      setParentOrgs(relevantParents);
+      }
+
+      setPartnerGroups(groups);
 
       // 全allocationsを取得
       const { data: allocData } = await supabase
@@ -92,7 +93,7 @@ export default function SubAllocationPrices() {
 
       // 全て展開
       const allIds = new Set<string>();
-      relevantParents.forEach(p => allIds.add(p.id));
+      groups.forEach(g => allIds.add(g.partner.id));
       setExpandedOrgs(allIds);
 
     } catch (e) {
@@ -113,17 +114,17 @@ export default function SubAllocationPrices() {
     });
   };
 
-  // 子企業の卸単価を編集
-  const openEditPrices = (childOrg: Organization, parentOrgId: string) => {
-    // 親企業のallocationsを取得
-    const parentAllocs = allAllocations.filter(a => a.child_org_id === parentOrgId);
+  // 二次代理店の卸単価を編集
+  const openEditPrices = (subPartner: Organization, partnerOrgId: string) => {
+    // 一次代理店のallocationsを取得（= 一次代理店に割り当てられた案件）
+    const partnerAllocs = allAllocations.filter(a => a.child_org_id === partnerOrgId);
     
-    const prices: PriceEntry[] = parentAllocs
+    const prices: PriceEntry[] = partnerAllocs
       .filter(a => (a as any).project?.status !== 'closed')
       .map(a => {
         const proj = (a as any).project;
         const existingPrice = allSubPrices.find(
-          p => p.allocation_id === a.id && p.sub_org_id === childOrg.id
+          p => p.allocation_id === a.id && p.sub_org_id === subPartner.id
         );
         return {
           allocationId: a.id,
@@ -135,7 +136,8 @@ export default function SubAllocationPrices() {
         };
       });
 
-    setEditingOrg(childOrg);
+    setEditingOrg(subPartner);
+    setEditingParentId(partnerOrgId);
     setEditingPrices(prices);
     setShowDialog(true);
   };
@@ -176,7 +178,7 @@ export default function SubAllocationPrices() {
               });
           }
         } else {
-          // nullの場合 → 既存レコードがあれば削除（親の単価を継承）
+          // nullの場合 → 既存レコードがあれば削除（一次代理店の卸単価と同額）
           if (entry.subPriceId) {
             await supabase
               .from('sub_allocation_prices')
@@ -195,11 +197,11 @@ export default function SubAllocationPrices() {
     }
   };
 
-  // 子企業の現在の卸単価サマリーを取得
-  const getChildPriceSummary = (childOrgId: string, parentOrgId: string) => {
-    const parentAllocs = allAllocations.filter(a => a.child_org_id === parentOrgId);
-    const activeAllocs = parentAllocs.filter(a => (a as any).project?.status !== 'closed');
-    const customPrices = allSubPrices.filter(p => p.sub_org_id === childOrgId);
+  // 二次代理店の卸単価サマリーを取得
+  const getSubPriceSummary = (subOrgId: string, partnerOrgId: string) => {
+    const partnerAllocs = allAllocations.filter(a => a.child_org_id === partnerOrgId);
+    const activeAllocs = partnerAllocs.filter(a => (a as any).project?.status !== 'closed');
+    const customPrices = allSubPrices.filter(p => p.sub_org_id === subOrgId);
     const customCount = customPrices.filter(p => 
       activeAllocs.some(a => a.id === p.allocation_id)
     ).length;
@@ -214,74 +216,82 @@ export default function SubAllocationPrices() {
     <div>
       <PageHeader
         title="二次代理店 卸単価設定"
-        description="一次代理店の案件を二次代理店に自動継承。卸単価のみ個別設定できます。"
+        description="一次代理店に割り当てた案件は二次代理店に自動継承されます。ここでは二次代理店への卸単価を案件ごとに設定できます。"
       />
 
-      {parentOrgs.length === 0 ? (
+      {partnerGroups.length === 0 ? (
         <Card className="border shadow-sm">
           <CardContent className="py-12 text-center">
             <Building2 className="w-12 h-12 text-muted-foreground/40 mx-auto mb-3" />
-            <p className="text-muted-foreground">子企業を持つ代理店がありません</p>
+            <p className="text-muted-foreground">二次代理店を持つ一次代理店がありません</p>
           </CardContent>
         </Card>
       ) : (
         <div className="space-y-4">
-          {parentOrgs.map(parent => (
-            <Card key={parent.id} className="border shadow-sm">
-              <CardHeader className="pb-3 cursor-pointer" onClick={() => toggleExpand(parent.id)}>
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-base font-semibold flex items-center gap-2">
-                    {expandedOrgs.has(parent.id) ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                    <Building2 className="w-4 h-4 text-muted-foreground" />
-                    {parent.name}
-                    <Badge variant="outline" className="text-xs ml-2">
-                      {parent.children.length}社
-                    </Badge>
-                  </CardTitle>
-                  <span className="text-sm text-muted-foreground">
-                    割り当て案件: {allAllocations.filter(a => a.child_org_id === parent.id && (a as any).project?.status !== 'closed').length}件
-                  </span>
-                </div>
-              </CardHeader>
-              {expandedOrgs.has(parent.id) && (
-                <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>二次代理店名</TableHead>
-                        <TableHead className="text-center">継承案件数</TableHead>
-                        <TableHead className="text-center">個別単価設定</TableHead>
-                        <TableHead className="text-right">操作</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {parent.children.map(child => {
-                        const summary = getChildPriceSummary(child.id, parent.id);
-                        return (
-                          <TableRow key={child.id}>
-                            <TableCell className="font-medium">{child.name}</TableCell>
-                            <TableCell className="text-center">{summary.total}件</TableCell>
-                            <TableCell className="text-center">
-                              {summary.custom > 0 ? (
-                                <Badge className="bg-blue-100 text-blue-700 border-0">{summary.custom}件設定済</Badge>
-                              ) : (
-                                <span className="text-sm text-muted-foreground">親単価を継承</span>
-                              )}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <Button variant="outline" size="sm" onClick={() => openEditPrices(child, parent.id)}>
-                                <Pencil className="w-3.5 h-3.5 mr-1" /> 卸単価設定
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              )}
-            </Card>
-          ))}
+          {partnerGroups.map(({ partner, subPartners }) => {
+            const partnerAllocCount = allAllocations.filter(
+              a => a.child_org_id === partner.id && (a as any).project?.status !== 'closed'
+            ).length;
+
+            return (
+              <Card key={partner.id} className="border shadow-sm">
+                <CardHeader className="pb-3 cursor-pointer" onClick={() => toggleExpand(partner.id)}>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-base font-semibold flex items-center gap-2">
+                      {expandedOrgs.has(partner.id) ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                      <Building2 className="w-4 h-4 text-muted-foreground" />
+                      {partner.name}
+                      <Badge variant="outline" className="text-xs ml-2">
+                        二次代理店 {subPartners.length}社
+                      </Badge>
+                    </CardTitle>
+                    <span className="text-sm text-muted-foreground">
+                      割り当て案件: {partnerAllocCount}件
+                    </span>
+                  </div>
+                </CardHeader>
+                {expandedOrgs.has(partner.id) && (
+                  <CardContent>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>二次代理店名</TableHead>
+                          <TableHead className="text-center">継承案件数</TableHead>
+                          <TableHead className="text-center">卸単価設定状況</TableHead>
+                          <TableHead className="text-right">操作</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {subPartners.map(sub => {
+                          const summary = getSubPriceSummary(sub.id, partner.id);
+                          return (
+                            <TableRow key={sub.id}>
+                              <TableCell className="font-medium">{sub.name}</TableCell>
+                              <TableCell className="text-center">{summary.total}件</TableCell>
+                              <TableCell className="text-center">
+                                {summary.custom > 0 ? (
+                                  <Badge className="bg-blue-100 text-blue-700 border-0">
+                                    {summary.custom}/{summary.total}件 設定済
+                                  </Badge>
+                                ) : (
+                                  <span className="text-sm text-muted-foreground">未設定（{partner.name}と同額）</span>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <Button variant="outline" size="sm" onClick={() => openEditPrices(sub, partner.id)}>
+                                  <Pencil className="w-3.5 h-3.5 mr-1" /> 卸単価設定
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                )}
+              </Card>
+            );
+          })}
         </div>
       )}
 
@@ -291,7 +301,7 @@ export default function SubAllocationPrices() {
           <DialogHeader>
             <DialogTitle>{editingOrg?.name} — 卸単価設定</DialogTitle>
             <DialogDescription>
-              各案件の卸単価を設定します。空欄の場合は親企業の卸単価がそのまま適用されます。
+              各案件の卸単価を設定します。空欄の場合は一次代理店（{partnerGroups.find(g => g.partner.id === editingParentId)?.partner.name || '親企業'}）への卸単価と同額が適用されます。
             </DialogDescription>
           </DialogHeader>
           <div className="py-2">
@@ -299,8 +309,8 @@ export default function SubAllocationPrices() {
               <TableHeader>
                 <TableRow>
                   <TableHead>案件</TableHead>
-                  <TableHead className="text-right">親企業への卸単価</TableHead>
-                  <TableHead className="text-right">この代理店への卸単価</TableHead>
+                  <TableHead className="text-right">一次代理店への卸単価</TableHead>
+                  <TableHead className="text-right">この二次代理店への卸単価</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -330,14 +340,14 @@ export default function SubAllocationPrices() {
                 {editingPrices.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={3} className="text-center text-muted-foreground py-6">
-                      親企業に割り当てられた案件がありません
+                      一次代理店に割り当てられた案件がありません
                     </TableCell>
                   </TableRow>
                 )}
               </TableBody>
             </Table>
             <p className="text-xs text-muted-foreground mt-3">
-              空欄の場合、親企業の卸単価がそのまま適用されます。
+              空欄の場合、一次代理店への卸単価と同額が適用されます。
             </p>
           </div>
           <DialogFooter>
