@@ -91,6 +91,25 @@ export default function Organizations() {
     return orgs.find(o => o.id === orgId)?.name || '不明';
   };
 
+  // Build hierarchical org list for select dropdowns
+  const getHierarchicalOrgs = () => {
+    const topLevel = orgs.filter(o => !o.parent_org_id);
+    const result: { id: string; name: string; depth: number; parentName?: string }[] = [];
+    const addChildren = (parentId: string, depth: number) => {
+      const children = orgs.filter(o => o.parent_org_id === parentId);
+      for (const child of children) {
+        const parent = orgs.find(o => o.id === parentId);
+        result.push({ id: child.id, name: child.name, depth, parentName: parent?.name });
+        addChildren(child.id, depth + 1);
+      }
+    };
+    for (const top of topLevel) {
+      result.push({ id: top.id, name: top.name, depth: 0 });
+      addChildren(top.id, 1);
+    }
+    return result;
+  };
+
   const getRoleLabel = (role: string) => {
     switch (role) {
       case 'admin': return 'Admin';
@@ -512,11 +531,22 @@ export default function Organizations() {
               <Select value={createUserOrgId} onValueChange={setCreateUserOrgId}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {orgs.map(o => (
-                    <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>
+                  {getHierarchicalOrgs().map(o => (
+                    <SelectItem key={o.id} value={o.id}>
+                      {'\u00A0\u00A0'.repeat(o.depth)}{o.depth > 0 ? '└ ' : ''}{o.name}
+                      {o.parentName ? ` (${o.parentName})` : ''}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              {createUserOrgId && (
+                <p className="text-xs text-muted-foreground">
+                  選択中: <strong>{getOrgName(createUserOrgId)}</strong>
+                  {orgs.find(o => o.id === createUserOrgId)?.parent_org_id && (
+                    <> — 親企業: {getParentName(orgs.find(o => o.id === createUserOrgId)?.parent_org_id || null)}</>
+                  )}
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <Label>ユーザーID <span className="text-destructive">*</span></Label>
@@ -594,11 +624,22 @@ export default function Organizations() {
                 <Select value={editOrgId} onValueChange={setEditOrgId}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {orgs.map(o => (
-                      <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>
+                    {getHierarchicalOrgs().map(o => (
+                      <SelectItem key={o.id} value={o.id}>
+                        {'\u00A0\u00A0'.repeat(o.depth)}{o.depth > 0 ? '└ ' : ''}{o.name}
+                        {o.parentName ? ` (${o.parentName})` : ''}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                {editOrgId && (
+                  <p className="text-xs text-muted-foreground">
+                    選択中: <strong>{getOrgName(editOrgId)}</strong>
+                    {orgs.find(o => o.id === editOrgId)?.parent_org_id && (
+                      <> — 親企業: {getParentName(orgs.find(o => o.id === editOrgId)?.parent_org_id || null)}</>
+                    )}
+                  </p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label>ロール</Label>

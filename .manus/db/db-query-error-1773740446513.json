@@ -1,0 +1,8 @@
+{
+  "query": "SELECT u.id, u.name, u.login_id, u.role, u.org_id, o.name as org_name, o.parent_org_id, o.org_type FROM users u LEFT JOIN organizations o ON u.org_id = o.id WHERE u.name LIKE '%大藏%' OR u.name LIKE '%大蔵%';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3XnG4b7Nz2zs3sV.root --database e2zSqZTPJkUs8xTu63WAYC --execute SELECT u.id, u.name, u.login_id, u.role, u.org_id, o.name as org_name, o.parent_org_id, o.org_type FROM users u LEFT JOIN organizations o ON u.org_id = o.id WHERE u.name LIKE '%大藏%' OR u.name LIKE '%大蔵%';",
+  "returncode": 1,
+  "logs": [
+    "ERROR 1146 (42S02) at line 1: Table 'e2zsqztpjkus8xtu63wayc.organizations' doesn't exist"
+  ]
+}
