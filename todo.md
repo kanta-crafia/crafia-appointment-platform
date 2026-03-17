@@ -258,5 +258,5 @@
 
 ## v3.5.2 二次代理店で案件が見れない問題の修正
 - [x] 二次代理店アカウントで案件が表示されない原因調査（RLSポリシーが親企業のallocationsへのアクセスをブロック）
-- [x] 問題の修正（allocations/projects/organizationsのRLSポリシーを修正）
+- [x] 問題の修正（RLS無限再帰をSECURITY DEFINER関数get_my_parent_org_id()で解決）
 - [ ] GitHubプッシュ
