@@ -297,7 +297,7 @@ export default function SubAllocationPrices() {
 
       {/* 卸単価編集ダイアログ */}
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingOrg?.name} — 卸単価設定</DialogTitle>
             <DialogDescription>
@@ -328,7 +328,7 @@ export default function SubAllocationPrices() {
                         <Input
                           type="number"
                           min={0}
-                          className="w-28 text-right"
+                          className="w-36 text-right"
                           placeholder={`${entry.parentPayout}`}
                           value={entry.subPrice ?? ''}
                           onChange={(e) => handlePriceChange(i, e.target.value)}

@@ -636,7 +636,7 @@ export default function SubPartnerManagement() {
 
       {/* Price Edit Dialog */}
       <Dialog open={priceDialogOpen} onOpenChange={setPriceDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingPriceOrg?.name} — 卸単価設定</DialogTitle>
           </DialogHeader>
@@ -665,7 +665,7 @@ export default function SubPartnerManagement() {
                         <Input
                           type="number"
                           min={0}
-                          className="w-28 text-right"
+                          className="w-36 text-right"
                           placeholder={`${entry.parentPayout}`}
                           value={entry.subPrice ?? ''}
                           onChange={(e) => handlePriceEntryChange(i, e.target.value)}
