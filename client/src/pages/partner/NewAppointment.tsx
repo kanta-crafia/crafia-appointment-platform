@@ -15,7 +15,7 @@ import { ArrowLeft, Loader2 } from 'lucide-react';
 import { Link } from 'wouter';
 
 interface AllocationWithPrice extends Allocation {
-  effectivePayoutPerAppointment: number;
+  effectivePayoutPerAppointment: number | null;
 }
 
 export default function NewAppointment() {
@@ -92,7 +92,8 @@ export default function NewAppointment() {
 
           const inherited: AllocationWithPrice[] = parentAllocations.map(a => ({
             ...a,
-            effectivePayoutPerAppointment: priceMap.get(a.id) ?? Number(a.payout_per_appointment),
+            // 卸単価が未設定の場合はnull（一次代理店の単価を見せない）
+            effectivePayoutPerAppointment: priceMap.has(a.id) ? priceMap.get(a.id)! : null,
           }));
           allAllocs = [...allAllocs, ...inherited];
         }

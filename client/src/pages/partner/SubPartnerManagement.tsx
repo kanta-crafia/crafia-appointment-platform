@@ -507,7 +507,7 @@ export default function SubPartnerManagement() {
                           {pc.custom > 0 ? (
                             <Badge className="bg-blue-100 text-blue-700 border-0">{pc.custom}件設定済</Badge>
                           ) : (
-                            <span className="text-sm text-muted-foreground">親単価を継承</span>
+                            <span className="text-sm text-muted-foreground">未設定（単価非表示）</span>
                           )}
                         </TableCell>
                         <TableCell className="text-right">
@@ -641,7 +641,7 @@ export default function SubPartnerManagement() {
             <DialogTitle>{editingPriceOrg?.name} — 卸単価設定</DialogTitle>
           </DialogHeader>
           <div className="py-2">
-            <p className="text-sm text-muted-foreground mb-3">各案件の卸単価を設定します。空欄の場合は自社への卸単価がそのまま適用されます。</p>
+            <p className="text-sm text-muted-foreground mb-3">各案件の卸単価を設定します。空欄の場合、二次代理店には単価が表示されません。</p>
             <Table>
               <TableHeader>
                 <TableRow>

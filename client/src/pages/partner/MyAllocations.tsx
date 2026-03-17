@@ -11,7 +11,7 @@ import { Link } from 'wouter';
 import { ClipboardCheck, Infinity, Eye, ExternalLink, Calendar, FileText, Target, Info } from 'lucide-react';
 
 interface AllocationWithPrice extends Allocation {
-  effectivePayoutPerAppointment: number;
+  effectivePayoutPerAppointment: number | null;
 }
 
 export default function MyAllocations() {
@@ -78,7 +78,8 @@ export default function MyAllocations() {
 
           inheritedAllocations = parentAllocations.map(a => ({
             ...a,
-            effectivePayoutPerAppointment: priceMap.get(a.id) ?? Number(a.payout_per_appointment),
+            // 卸単価が未設定の場合はnull（一次代理店の単価を見せない）
+            effectivePayoutPerAppointment: priceMap.has(a.id) ? priceMap.get(a.id)! : null,
           }));
         }
       }
@@ -156,7 +157,9 @@ export default function MyAllocations() {
                     <TableCell className="text-sm text-muted-foreground">
                       {project?.start_date || '—'} ~ {project?.end_date || '—'}
                     </TableCell>
-                    <TableCell className="text-right font-mono">¥{a.effectivePayoutPerAppointment.toLocaleString()}</TableCell>
+                    <TableCell className="text-right font-mono">
+                      {a.effectivePayoutPerAppointment !== null ? `¥${a.effectivePayoutPerAppointment.toLocaleString()}` : <span className="text-muted-foreground">—</span>}
+                    </TableCell>
                     <TableCell className="text-center">
                       {isUnlimited
                         ? <span className="inline-flex items-center gap-1 text-muted-foreground"><Infinity className="w-4 h-4" /></span>

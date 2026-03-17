@@ -274,7 +274,7 @@ export default function SubAllocationPrices() {
                                     {summary.custom}/{summary.total}件 設定済
                                   </Badge>
                                 ) : (
-                                  <span className="text-sm text-muted-foreground">未設定（{partner.name}と同額）</span>
+                                  <span className="text-sm text-muted-foreground">未設定（単価非表示）</span>
                                 )}
                               </TableCell>
                               <TableCell className="text-right">
@@ -301,7 +301,7 @@ export default function SubAllocationPrices() {
           <DialogHeader>
             <DialogTitle>{editingOrg?.name} — 卸単価設定</DialogTitle>
             <DialogDescription>
-              各案件の卸単価を設定します。空欄の場合は一次代理店（{partnerGroups.find(g => g.partner.id === editingParentId)?.partner.name || '親企業'}）への卸単価と同額が適用されます。
+              各案件の卸単価を設定します。空欄の場合、二次代理店には単価が表示されません。
             </DialogDescription>
           </DialogHeader>
           <div className="py-2">
@@ -347,7 +347,7 @@ export default function SubAllocationPrices() {
               </TableBody>
             </Table>
             <p className="text-xs text-muted-foreground mt-3">
-              空欄の場合、一次代理店への卸単価と同額が適用されます。
+              空欄の場合、二次代理店には単価が表示されません。
             </p>
           </div>
           <DialogFooter>
