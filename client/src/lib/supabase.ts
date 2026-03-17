@@ -29,6 +29,22 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   },
 });
 
+/**
+ * When the tab becomes visible again (user switches back), attempt to
+ * refresh the session so stale tokens don't cause silent failures.
+ */
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      supabase.auth.getSession().then(({ data, error }) => {
+        if (error) {
+          console.warn('[Supabase] Session refresh on visibility change failed:', error.message);
+        }
+      });
+    }
+  });
+}
+
 // Types based on our DB schema
 export type UserRole = 'admin' | 'partner' | 'sub_partner' | 'approver';
 export type ProjectStatus = 'active' | 'inactive' | 'closed';

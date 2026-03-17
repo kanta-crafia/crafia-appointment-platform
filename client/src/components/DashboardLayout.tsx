@@ -45,12 +45,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   useEffect(() => {
     if (!user || isAdmin) return;
     const checkSubOrgs = async () => {
-      const { count } = await supabase
-        .from('organizations')
-        .select('*', { count: 'exact', head: true })
-        .eq('parent_org_id', user.org_id)
-        .eq('status', 'active');
-      setHasSubOrgs((count || 0) > 0);
+      try {
+        const { count } = await supabase
+          .from('organizations')
+          .select('*', { count: 'exact', head: true })
+          .eq('parent_org_id', user.org_id)
+          .eq('status', 'active');
+        setHasSubOrgs((count || 0) > 0);
+      } catch (e) {
+        console.error('checkSubOrgs error:', e);
+      }
     };
     checkSubOrgs();
   }, [user, isAdmin]);

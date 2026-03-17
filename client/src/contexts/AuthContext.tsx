@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback, useRef, type ReactNode } from 'react';
 import { supabase, type User } from '@/lib/supabase';
 import type { Session } from '@supabase/supabase-js';
 
@@ -19,6 +19,14 @@ interface AuthContextType extends AuthState {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+/** Timeout wrapper: resolves with null if the promise doesn't settle in `ms` */
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
+  return Promise.race([
+    promise,
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), ms)),
+  ]);
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>({
     session: null,
@@ -28,6 +36,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isPartner: false,
     isSubPartner: false,
   });
+
+  // Track if we've already initialized to prevent double-init
+  const initRef = useRef(false);
 
   const fetchUser = useCallback(async (userId: string): Promise<User | null> => {
     try {
@@ -55,15 +66,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    // Prevent double-init in React StrictMode
+    if (initRef.current) return;
+    initRef.current = true;
+
     let cancelled = false;
 
-    // Initialize auth state
     const initAuth = async () => {
       try {
-        // With Web Locks disabled (noOpLock), getSession() should not deadlock
-        const { data: { session } } = await supabase.auth.getSession();
+        // Wrap getSession in a timeout to prevent indefinite hangs
+        const result = await withTimeout(
+          supabase.auth.getSession(),
+          5000 // 5 second timeout
+        );
 
         if (cancelled) return;
+
+        if (!result) {
+          // Timeout — treat as no session
+          console.warn('[Auth] getSession timed out, treating as unauthenticated');
+          updateStateWithUser(null, null);
+          return;
+        }
+
+        const session = result.data?.session;
 
         if (session?.user) {
           const user = await fetchUser(session.user.id);
@@ -76,7 +102,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         }
       } catch (err) {
-        console.error('initAuth error:', err);
+        console.error('[Auth] initAuth error:', err);
         if (!cancelled) {
           updateStateWithUser(null, null);
         }
@@ -89,6 +115,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (cancelled) return;
 
+      // Handle token refresh failures — force logout
+      if (event === 'TOKEN_REFRESHED' && !session) {
+        console.warn('[Auth] Token refresh failed, signing out');
+        updateStateWithUser(null, null);
+        return;
+      }
+
       if (event === 'SIGNED_OUT') {
         updateStateWithUser(null, null);
         return;
@@ -99,6 +132,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!cancelled) {
           updateStateWithUser(session, user);
         }
+      } else if (event === 'INITIAL_SESSION' && !session) {
+        // No session on initial load
+        if (!cancelled) {
+          updateStateWithUser(null, null);
+        }
       }
     });
 
@@ -107,6 +145,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       subscription.unsubscribe();
     };
   }, [fetchUser, updateStateWithUser]);
+
+  // Periodic session health check — detect expired tokens
+  useEffect(() => {
+    if (!state.session) return;
+
+    const checkSession = async () => {
+      try {
+        const { data, error } = await supabase.auth.getSession();
+        if (error || !data.session) {
+          console.warn('[Auth] Session expired during health check, signing out');
+          updateStateWithUser(null, null);
+        }
+      } catch {
+        // Network error — don't sign out, just log
+        console.warn('[Auth] Session health check failed (network?)');
+      }
+    };
+
+    // Check every 5 minutes
+    const interval = setInterval(checkSession, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [state.session, updateStateWithUser]);
 
   const signIn = async (loginId: string, password: string) => {
     try {

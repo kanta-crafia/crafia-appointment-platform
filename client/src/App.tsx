@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
@@ -67,9 +68,30 @@ function AuthenticatedRoutes() {
 }
 
 function AppRouter() {
-  const { session, loading } = useAuth();
+  const { session, loading, signOut } = useAuth();
+  const [timedOut, setTimedOut] = useState(false);
 
-  if (loading) {
+  // Safety timeout: if loading takes more than 8 seconds, force show login
+  useEffect(() => {
+    if (!loading) {
+      setTimedOut(false);
+      return;
+    }
+    const timer = setTimeout(() => {
+      setTimedOut(true);
+    }, 8000);
+    return () => clearTimeout(timer);
+  }, [loading]);
+
+  // If timed out while loading, force sign out via effect
+  useEffect(() => {
+    if (timedOut && loading) {
+      console.warn('[AppRouter] Auth loading timed out, forcing sign out');
+      signOut();
+    }
+  }, [timedOut, loading, signOut]);
+
+  if (loading && !timedOut) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
