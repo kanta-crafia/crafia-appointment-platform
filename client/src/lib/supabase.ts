@@ -169,6 +169,18 @@ export interface SubPartnerPayment {
   sub_org?: Organization;
 }
 
+export interface SubAllocationPrice {
+  id: string;
+  allocation_id: string;
+  sub_org_id: string;
+  payout_per_appointment: number;
+  created_at: string;
+  updated_at: string;
+  // Joined fields
+  allocation?: Allocation;
+  sub_org?: Organization;
+}
+
 export interface AuditLog {
   id: number;
   actor_user_id: string | null;

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { supabase, type Allocation } from '@/lib/supabase';
+import { supabase, type Allocation, type SubAllocationPrice } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLocation, useSearch } from 'wouter';
 import { PageHeader } from '@/components/PageHeader';
@@ -14,6 +14,10 @@ import { toast } from 'sonner';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { Link } from 'wouter';
 
+interface AllocationWithPrice extends Allocation {
+  effectivePayoutPerAppointment: number;
+}
+
 export default function NewAppointment() {
   const { user } = useAuth();
   const [, navigate] = useLocation();
@@ -21,7 +25,7 @@ export default function NewAppointment() {
   const params = new URLSearchParams(searchString);
   const preselectedAllocationId = params.get('allocation_id') || '';
 
-  const [allocations, setAllocations] = useState<Allocation[]>([]);
+  const [allocations, setAllocations] = useState<AllocationWithPrice[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showDuplicateDialog, setShowDuplicateDialog] = useState(false);
@@ -43,12 +47,65 @@ export default function NewAppointment() {
     }
     setLoading(true);
     try {
-      const { data } = await supabase
+      // 自分の組織情報を取得
+      const { data: myOrg } = await supabase
+        .from('organizations')
+        .select('id, parent_org_id')
+        .eq('id', user.org_id)
+        .single();
+
+      let allAllocs: AllocationWithPrice[] = [];
+
+      // 1. 自分の組織に直接割り当てられた案件
+      const { data: directData } = await supabase
         .from('allocations')
         .select('*, project:projects(*)')
         .eq('child_org_id', user.org_id)
         .eq('status', 'active');
-      setAllocations(data || []);
+      const directAllocations = directData || [];
+
+      // 2. sub_partnerの場合、親企業のallocationsも継承
+      if (user.role === 'sub_partner' && myOrg?.parent_org_id) {
+        const { data: parentAllocData } = await supabase
+          .from('allocations')
+          .select('*, project:projects(*)')
+          .eq('child_org_id', myOrg.parent_org_id)
+          .eq('status', 'active');
+
+        const directProjectIds = new Set(directAllocations.map(a => a.project_id));
+        const parentAllocations = (parentAllocData || []).filter(
+          a => !directProjectIds.has(a.project_id)
+        );
+
+        if (parentAllocations.length > 0) {
+          const parentAllocIds = parentAllocations.map(a => a.id);
+          const { data: priceData } = await supabase
+            .from('sub_allocation_prices')
+            .select('*')
+            .in('allocation_id', parentAllocIds)
+            .eq('sub_org_id', user.org_id);
+
+          const priceMap = new Map<string, number>();
+          (priceData || []).forEach((p: SubAllocationPrice) => {
+            priceMap.set(p.allocation_id, Number(p.payout_per_appointment));
+          });
+
+          const inherited: AllocationWithPrice[] = parentAllocations.map(a => ({
+            ...a,
+            effectivePayoutPerAppointment: priceMap.get(a.id) ?? Number(a.payout_per_appointment),
+          }));
+          allAllocs = [...allAllocs, ...inherited];
+        }
+      }
+
+      // 直接割り当て
+      const directWithPrice: AllocationWithPrice[] = directAllocations.map(a => ({
+        ...a,
+        effectivePayoutPerAppointment: Number(a.payout_per_appointment),
+      }));
+      allAllocs = [...directWithPrice, ...allAllocs];
+
+      setAllocations(allAllocs);
     } catch (e) {
       console.error('Allocations fetch error:', e);
     } finally {

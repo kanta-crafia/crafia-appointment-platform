@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { supabase, type Organization, type Appointment, type SubPartnerPayment } from '@/lib/supabase';
+import { supabase, type Organization, type Appointment, type SubPartnerPayment, type Allocation, type SubAllocationPrice } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { PageHeader } from '@/components/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,8 +13,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import {
   Building2, Users, ClipboardCheck, TrendingUp, Clock, CheckCircle2,
-  XCircle, DollarSign, Plus, Edit, Eye, EyeOff
+  XCircle, DollarSign, Plus, Edit, Eye, EyeOff, Save, Pencil
 } from 'lucide-react';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Dialog as PriceDialog, DialogContent as PriceDialogContent, DialogHeader as PriceDialogHeader, DialogTitle as PriceDialogTitle, DialogFooter as PriceDialogFooter, DialogDescription as PriceDialogDescription } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 
@@ -41,6 +43,21 @@ export default function SubPartnerManagement() {
 
   // PW visibility
   const [visiblePw, setVisiblePw] = useState<Record<string, boolean>>({});
+
+  // Sub allocation prices
+  const [parentAllocations, setParentAllocations] = useState<Allocation[]>([]);
+  const [subPrices, setSubPrices] = useState<SubAllocationPrice[]>([]);
+  const [priceDialogOpen, setPriceDialogOpen] = useState(false);
+  const [editingPriceOrg, setEditingPriceOrg] = useState<Organization | null>(null);
+  const [editingPriceEntries, setEditingPriceEntries] = useState<Array<{
+    allocationId: string;
+    projectTitle: string;
+    projectNumber: string;
+    parentPayout: number;
+    subPrice: number | null;
+    subPriceId: string | null;
+  }>>([]);
+  const [savingPrices, setSavingPrices] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!user) return;
@@ -91,6 +108,20 @@ export default function SubPartnerManagement() {
         .eq('parent_org_id', user.org_id)
         .order('period', { ascending: false });
       setPayments(payData || []);
+
+      // Get parent allocations (allocations where child_org_id = current org)
+      const { data: allocData } = await supabase
+        .from('allocations')
+        .select('*, project:projects(title, project_number, status)')
+        .eq('child_org_id', user.org_id);
+      setParentAllocations(allocData || []);
+
+      // Get sub allocation prices for sub orgs
+      const { data: priceData } = await supabase
+        .from('sub_allocation_prices')
+        .select('*')
+        .in('sub_org_id', subOrgIds);
+      setSubPrices(priceData || []);
 
     } catch (e) {
       console.error('SubPartnerManagement fetch error:', e);
@@ -196,6 +227,74 @@ export default function SubPartnerManagement() {
     }
   };
 
+  // Price editing handlers
+  const openPriceEdit = (childOrg: Organization) => {
+    const activeAllocs = parentAllocations.filter(a => (a as any).project?.status !== 'closed');
+    const entries = activeAllocs.map(a => {
+      const proj = (a as any).project;
+      const existing = subPrices.find(p => p.allocation_id === a.id && p.sub_org_id === childOrg.id);
+      return {
+        allocationId: a.id,
+        projectTitle: proj?.title || '—',
+        projectNumber: proj?.project_number || '',
+        parentPayout: Number(a.payout_per_appointment),
+        subPrice: existing ? Number(existing.payout_per_appointment) : null,
+        subPriceId: existing?.id || null,
+      };
+    });
+    setEditingPriceOrg(childOrg);
+    setEditingPriceEntries(entries);
+    setPriceDialogOpen(true);
+  };
+
+  const handlePriceEntryChange = (index: number, value: string) => {
+    setEditingPriceEntries(prev => {
+      const next = [...prev];
+      next[index] = { ...next[index], subPrice: value === '' ? null : Number(value) };
+      return next;
+    });
+  };
+
+  const handleSavePrices = async () => {
+    if (!editingPriceOrg) return;
+    setSavingPrices(true);
+    try {
+      for (const entry of editingPriceEntries) {
+        if (entry.subPrice !== null) {
+          if (entry.subPriceId) {
+            await supabase.from('sub_allocation_prices').update({
+              payout_per_appointment: entry.subPrice,
+              updated_at: new Date().toISOString(),
+            }).eq('id', entry.subPriceId);
+          } else {
+            await supabase.from('sub_allocation_prices').insert({
+              allocation_id: entry.allocationId,
+              sub_org_id: editingPriceOrg.id,
+              payout_per_appointment: entry.subPrice,
+            });
+          }
+        } else {
+          if (entry.subPriceId) {
+            await supabase.from('sub_allocation_prices').delete().eq('id', entry.subPriceId);
+          }
+        }
+      }
+      toast.success(`${editingPriceOrg.name}の卸単価を更新しました`);
+      setPriceDialogOpen(false);
+      fetchData();
+    } catch (e: any) {
+      toast.error('保存に失敗しました: ' + (e.message || ''));
+    } finally {
+      setSavingPrices(false);
+    }
+  };
+
+  const getChildPriceCount = (childOrgId: string) => {
+    const activeAllocs = parentAllocations.filter(a => (a as any).project?.status !== 'closed');
+    const custom = subPrices.filter(p => p.sub_org_id === childOrgId && activeAllocs.some(a => a.id === p.allocation_id));
+    return { total: activeAllocs.length, custom: custom.length };
+  };
+
   const statusBadge = (status: string) => {
     switch (status) {
       case 'approved': return <Badge className="bg-emerald-100 text-emerald-700 border-0">承認済</Badge>;
@@ -296,6 +395,7 @@ export default function SubPartnerManagement() {
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="mb-4">
           <TabsTrigger value="overview">概要</TabsTrigger>
+          <TabsTrigger value="prices">卸単価設定</TabsTrigger>
           <TabsTrigger value="appointments">アポ一覧</TabsTrigger>
           <TabsTrigger value="payments">支払い管理</TabsTrigger>
         </TabsList>
@@ -377,6 +477,51 @@ export default function SubPartnerManagement() {
               );
             })}
           </div>
+        </TabsContent>
+
+        {/* Prices Tab */}
+        <TabsContent value="prices">
+          <Card className="border shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base font-semibold">二次代理店への卸単価設定</CardTitle>
+              <p className="text-sm text-muted-foreground">自社に割り当てられた案件は二次代理店に自動継承されます。卸単価のみ個別設定できます。</p>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>二次代理店名</TableHead>
+                    <TableHead className="text-center">継承案件数</TableHead>
+                    <TableHead className="text-center">個別単価設定</TableHead>
+                    <TableHead className="text-right">操作</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {subOrgs.map(org => {
+                    const pc = getChildPriceCount(org.id);
+                    return (
+                      <TableRow key={org.id}>
+                        <TableCell className="font-medium">{org.name}</TableCell>
+                        <TableCell className="text-center">{pc.total}件</TableCell>
+                        <TableCell className="text-center">
+                          {pc.custom > 0 ? (
+                            <Badge className="bg-blue-100 text-blue-700 border-0">{pc.custom}件設定済</Badge>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">親単価を継承</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button variant="outline" size="sm" onClick={() => openPriceEdit(org)}>
+                            <Pencil className="w-3.5 h-3.5 mr-1" /> 卸単価設定
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* Appointments Tab */}
@@ -488,6 +633,65 @@ export default function SubPartnerManagement() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Price Edit Dialog */}
+      <Dialog open={priceDialogOpen} onOpenChange={setPriceDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editingPriceOrg?.name} — 卸単価設定</DialogTitle>
+          </DialogHeader>
+          <div className="py-2">
+            <p className="text-sm text-muted-foreground mb-3">各案件の卸単価を設定します。空欄の場合は自社への卸単価がそのまま適用されます。</p>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>案件</TableHead>
+                  <TableHead className="text-right">自社への卸単価</TableHead>
+                  <TableHead className="text-right">この代理店への卸単価</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {editingPriceEntries.map((entry, i) => (
+                  <TableRow key={entry.allocationId}>
+                    <TableCell>
+                      {entry.projectNumber ? `[${entry.projectNumber}] ` : ''}{entry.projectTitle}
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-muted-foreground">
+                      ¥{entry.parentPayout.toLocaleString()}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <span className="text-sm text-muted-foreground">¥</span>
+                        <Input
+                          type="number"
+                          min={0}
+                          className="w-28 text-right"
+                          placeholder={`${entry.parentPayout}`}
+                          value={entry.subPrice ?? ''}
+                          onChange={(e) => handlePriceEntryChange(i, e.target.value)}
+                        />
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {editingPriceEntries.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={3} className="text-center text-muted-foreground py-6">
+                      割り当てられた案件がありません
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPriceDialogOpen(false)}>キャンセル</Button>
+            <Button onClick={handleSavePrices} disabled={savingPrices}>
+              {savingPrices ? '保存中...' : <><Save className="w-4 h-4 mr-1" /> 保存</>}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Payment Dialog */}
       <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>

@@ -18,12 +18,45 @@ export default function PartnerDashboard() {
     }
     setLoading(true);
     try {
-      const [allocRes, apptRes] = await Promise.all([
-        supabase.from('allocations').select('*, project:projects(*)').eq('child_org_id', user.org_id).eq('status', 'active'),
-        supabase.from('appointments').select('*').eq('org_id', user.org_id),
-      ]);
-      setAllocations(allocRes.data || []);
-      setAppointments(apptRes.data || []);
+      // 自分の組織情報を取得
+      const { data: myOrg } = await supabase
+        .from('organizations')
+        .select('id, parent_org_id')
+        .eq('id', user.org_id)
+        .single();
+
+      // 1. 自分の組織に直接割り当てられた案件
+      const { data: directAllocs } = await supabase
+        .from('allocations')
+        .select('*, project:projects(*)')
+        .eq('child_org_id', user.org_id)
+        .eq('status', 'active');
+      const directAllocations = directAllocs || [];
+
+      let allAllocs = [...directAllocations];
+
+      // 2. sub_partnerの場合、親企業のallocationsも継承
+      if (user.role === 'sub_partner' && myOrg?.parent_org_id) {
+        const { data: parentAllocData } = await supabase
+          .from('allocations')
+          .select('*, project:projects(*)')
+          .eq('child_org_id', myOrg.parent_org_id)
+          .eq('status', 'active');
+
+        const directProjectIds = new Set(directAllocations.map(a => a.project_id));
+        const parentAllocations = (parentAllocData || []).filter(
+          a => !directProjectIds.has(a.project_id)
+        );
+        allAllocs = [...allAllocs, ...parentAllocations];
+      }
+
+      const { data: apptData } = await supabase
+        .from('appointments')
+        .select('*')
+        .eq('org_id', user.org_id);
+
+      setAllocations(allAllocs);
+      setAppointments(apptData || []);
     } catch (e) {
       console.error('Dashboard data fetch error:', e);
     } finally {
@@ -91,7 +124,6 @@ export default function PartnerDashboard() {
                 const maxTotal = proj?.max_appointments_total || 0;
                 const confirmed = proj?.confirmed_count || 0;
                 const pct = !isUnlimited && maxTotal > 0 ? (confirmed / maxTotal) * 100 : 0;
-                // Count appointments for this specific project by this org
                 const myAppts = appointments.filter(ap => ap.project_id === a.project_id);
                 const myApproved = myAppts.filter(ap => ap.status === 'approved').length;
                 const myPending = myAppts.filter(ap => ap.status === 'pending').length;
@@ -111,7 +143,6 @@ export default function PartnerDashboard() {
                         <span className="text-xs font-medium text-muted-foreground w-10 text-right">{Math.round(pct)}%</span>
                       </div>
                     )}
-
                   </div>
                 );
               })}

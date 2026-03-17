@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { supabase, type Allocation, type Project } from '@/lib/supabase';
+import { supabase, type Allocation, type Project, type SubAllocationPrice } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { PageHeader } from '@/components/PageHeader';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -10,9 +10,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Link } from 'wouter';
 import { ClipboardCheck, Infinity, Eye, ExternalLink, Calendar, FileText, Target, Info } from 'lucide-react';
 
+interface AllocationWithPrice extends Allocation {
+  effectivePayoutPerAppointment: number;
+}
+
 export default function MyAllocations() {
   const { user } = useAuth();
-  const [allocations, setAllocations] = useState<Allocation[]>([]);
+  const [allocations, setAllocations] = useState<AllocationWithPrice[]>([]);
   const [loading, setLoading] = useState(true);
   const [detailProject, setDetailProject] = useState<Project | null>(null);
   const [showDetail, setShowDetail] = useState(false);
@@ -24,12 +28,68 @@ export default function MyAllocations() {
     }
     setLoading(true);
     try {
-      const { data } = await supabase
+      // まず自分の組織情報を取得（parent_org_idを確認）
+      const { data: myOrg } = await supabase
+        .from('organizations')
+        .select('id, parent_org_id')
+        .eq('id', user.org_id)
+        .single();
+
+      let directAllocations: Allocation[] = [];
+      let inheritedAllocations: AllocationWithPrice[] = [];
+
+      // 1. 自分の組織に直接割り当てられた案件を取得
+      const { data: directData } = await supabase
         .from('allocations')
         .select('*, project:projects(*)')
         .eq('child_org_id', user.org_id)
         .order('created_at', { ascending: false });
-      setAllocations(data || []);
+      directAllocations = directData || [];
+
+      // 2. sub_partnerの場合、親企業のallocationsも継承
+      if (user.role === 'sub_partner' && myOrg?.parent_org_id) {
+        const { data: parentAllocData } = await supabase
+          .from('allocations')
+          .select('*, project:projects(*)')
+          .eq('child_org_id', myOrg.parent_org_id)
+          .order('created_at', { ascending: false });
+
+        // 直接割り当てに含まれるproject_idのセット（重複排除用）
+        const directProjectIds = new Set(directAllocations.map(a => a.project_id));
+
+        // 親のallocationsから、直接割り当てにないものを継承
+        const parentAllocations = (parentAllocData || []).filter(
+          a => !directProjectIds.has(a.project_id)
+        );
+
+        if (parentAllocations.length > 0) {
+          // sub_allocation_pricesから自分の卸単価を取得
+          const parentAllocIds = parentAllocations.map(a => a.id);
+          const { data: priceData } = await supabase
+            .from('sub_allocation_prices')
+            .select('*')
+            .in('allocation_id', parentAllocIds)
+            .eq('sub_org_id', user.org_id);
+
+          const priceMap = new Map<string, number>();
+          (priceData || []).forEach((p: SubAllocationPrice) => {
+            priceMap.set(p.allocation_id, Number(p.payout_per_appointment));
+          });
+
+          inheritedAllocations = parentAllocations.map(a => ({
+            ...a,
+            effectivePayoutPerAppointment: priceMap.get(a.id) ?? Number(a.payout_per_appointment),
+          }));
+        }
+      }
+
+      // 直接割り当てにもeffectivePayoutPerAppointmentを設定
+      const directWithPrice: AllocationWithPrice[] = directAllocations.map(a => ({
+        ...a,
+        effectivePayoutPerAppointment: Number(a.payout_per_appointment),
+      }));
+
+      setAllocations([...directWithPrice, ...inheritedAllocations]);
     } catch (e) {
       console.error('Allocations fetch error:', e);
     } finally {
@@ -87,7 +147,7 @@ export default function MyAllocations() {
                 // 「無効」案件はアポ登録不可（上限到達と同じ扱い）
                 const canRegister = isActive && projectActive && !isFull;
                 return (
-                  <TableRow key={a.id}>
+                  <TableRow key={a.id + '-' + (a.project_id || '')}>
                     <TableCell>
                       <div>
                         <p className="font-medium">{project?.title || '—'}</p>
@@ -96,7 +156,7 @@ export default function MyAllocations() {
                     <TableCell className="text-sm text-muted-foreground">
                       {project?.start_date || '—'} ~ {project?.end_date || '—'}
                     </TableCell>
-                    <TableCell className="text-right font-mono">¥{Number(a.payout_per_appointment).toLocaleString()}</TableCell>
+                    <TableCell className="text-right font-mono">¥{a.effectivePayoutPerAppointment.toLocaleString()}</TableCell>
                     <TableCell className="text-center">
                       {isUnlimited
                         ? <span className="inline-flex items-center gap-1 text-muted-foreground"><Infinity className="w-4 h-4" /></span>
