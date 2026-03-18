@@ -46,7 +46,9 @@ function AuthenticatedRoutes() {
           <Route path="/sns-accounts" component={SnsAccounts} />
           <Route path="/sub-allocation-prices" component={SubAllocationPrices} />
           <Route path="/audit-logs" component={AuditLogs} />
-          <Route component={NotFound} />
+          <Route>
+            <Redirect to="/" />
+          </Route>
         </Switch>
       </DashboardLayout>
     );
@@ -61,7 +63,9 @@ function AuthenticatedRoutes() {
         <Route path="/appointments" component={PartnerAppointments} />
         <Route path="/sub-partners" component={SubPartnerManagement} />
         <Route path="/notifications" component={Notifications} />
-        <Route component={NotFound} />
+        <Route>
+          <Redirect to="/" />
+        </Route>
       </Switch>
     </DashboardLayout>
   );
