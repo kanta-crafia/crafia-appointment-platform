@@ -408,6 +408,11 @@ export default function Approvals() {
                 <Ban className="w-4 h-4 mr-1" /> 取消
               </Button>
             )}
+            {selectedAppt?.status === 'cancelled' && (
+              <Button onClick={() => handleApprove(selectedAppt)} disabled={processing} className="bg-emerald-600 hover:bg-emerald-700">
+                <CheckCircle className="w-4 h-4 mr-1" /> 再承認
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
