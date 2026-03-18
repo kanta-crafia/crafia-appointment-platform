@@ -151,6 +151,9 @@ export default function MyAllocations() {
                   <TableRow key={a.id + '-' + (a.project_id || '')}>
                     <TableCell>
                       <div>
+                        {project?.project_number && (
+                          <span className="text-xs text-muted-foreground font-mono">[{project.project_number}]</span>
+                        )}
                         <p className="font-medium">{project?.title || '—'}</p>
                       </div>
                     </TableCell>
