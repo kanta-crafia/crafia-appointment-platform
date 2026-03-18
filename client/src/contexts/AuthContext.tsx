@@ -43,6 +43,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const fetchingRef = useRef(false);
   // Cache the last user ID to avoid unnecessary re-fetches
   const lastUserIdRef = useRef<string | null>(null);
+  // Cache the last successfully fetched user to prevent losing role info
+  const lastUserRef = useRef<User | null>(null);
+  // Retry counter for fetchUser failures
+  const retryCountRef = useRef(0);
+  const MAX_RETRIES = 3;
 
   const fetchUser = useCallback(async (userId: string): Promise<User | null> => {
     try {
@@ -63,6 +68,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const updateStateWithUser = useCallback((session: Session | null, user: User | null) => {
+    // If session exists but user fetch failed, keep the cached user to prevent role flip
+    if (session && !user && lastUserRef.current && lastUserRef.current.id === session.user?.id) {
+      console.warn('[Auth] fetchUser returned null but session is valid — keeping cached user');
+      // Schedule a retry
+      if (retryCountRef.current < MAX_RETRIES) {
+        retryCountRef.current++;
+        const retryDelay = retryCountRef.current * 2000; // 2s, 4s, 6s
+        console.log(`[Auth] Scheduling user fetch retry #${retryCountRef.current} in ${retryDelay}ms`);
+        setTimeout(async () => {
+          if (session.user?.id) {
+            const retryUser = await fetchUser(session.user.id);
+            if (retryUser) {
+              retryCountRef.current = 0;
+              lastUserRef.current = retryUser;
+              lastUserIdRef.current = retryUser.id;
+              setState({
+                session,
+                user: retryUser,
+                loading: false,
+                isAdmin: retryUser.role === 'admin',
+                isPartner: retryUser.role === 'partner',
+                isSubPartner: retryUser.role === 'sub_partner',
+              });
+            }
+          }
+        }, retryDelay);
+      }
+      // Use cached user in the meantime
+      user = lastUserRef.current;
+    }
+
+    if (user) {
+      lastUserRef.current = user;
+      retryCountRef.current = 0;
+    }
     lastUserIdRef.current = user?.id || null;
     setState({
       session,
@@ -72,7 +112,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isPartner: user?.role === 'partner' || false,
       isSubPartner: user?.role === 'sub_partner' || false,
     });
-  }, []);
+  }, [fetchUser]);
 
   useEffect(() => {
     // Prevent double-init in React StrictMode
@@ -127,11 +167,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Handle token refresh failures — force logout
       if (event === 'TOKEN_REFRESHED' && !session) {
         console.warn('[Auth] Token refresh failed, signing out');
+        lastUserRef.current = null;
         updateStateWithUser(null, null);
         return;
       }
 
       if (event === 'SIGNED_OUT') {
+        lastUserRef.current = null;
         updateStateWithUser(null, null);
         return;
       }
@@ -190,6 +232,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         );
         if (!result || !result.data?.session) {
           console.warn('[Auth] Session expired during health check, signing out');
+          lastUserRef.current = null;
           updateStateWithUser(null, null);
         }
       } catch {
@@ -247,6 +290,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {
       // Force clear even if signOut fails
     }
+    lastUserRef.current = null;
     updateStateWithUser(null, null);
   };
 
@@ -254,13 +298,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const userId = state.user?.id || state.session?.user?.id;
     if (userId) {
       const user = await fetchUser(userId);
-      setState(prev => ({
-        ...prev,
-        user,
-        isAdmin: user?.role === 'admin' || false,
-        isPartner: user?.role === 'partner' || false,
-        isSubPartner: user?.role === 'sub_partner' || false,
-      }));
+      if (user) {
+        lastUserRef.current = user;
+        setState(prev => ({
+          ...prev,
+          user,
+          isAdmin: user.role === 'admin',
+          isPartner: user.role === 'partner',
+          isSubPartner: user.role === 'sub_partner',
+        }));
+      }
     }
   };
 

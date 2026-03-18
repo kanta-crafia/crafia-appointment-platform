@@ -135,3 +135,95 @@ describe('Auth state transitions', () => {
     expect(state.session).toBeNull();
   });
 });
+
+describe('Cached user fallback on fetchUser failure', () => {
+  /**
+   * Simulates the updateStateWithUser logic from AuthContext.
+   * When session exists but fetchUser returns null, the cached user should be used
+   * to prevent role flip (admin -> partner).
+   */
+  interface User {
+    id: string;
+    role: string;
+  }
+
+  interface Session {
+    user: { id: string };
+  }
+
+  function updateStateWithUser(
+    session: Session | null,
+    user: User | null,
+    cachedUser: User | null
+  ): { user: User | null; isAdmin: boolean; isPartner: boolean; isSubPartner: boolean } {
+    // If session exists but user fetch failed, keep the cached user
+    if (session && !user && cachedUser && cachedUser.id === session.user?.id) {
+      user = cachedUser;
+    }
+
+    return {
+      user,
+      isAdmin: user?.role === 'admin' || false,
+      isPartner: user?.role === 'partner' || false,
+      isSubPartner: user?.role === 'sub_partner' || false,
+    };
+  }
+
+  it('should use cached admin user when fetchUser fails', () => {
+    const session: Session = { user: { id: 'admin-1' } };
+    const cachedUser: User = { id: 'admin-1', role: 'admin' };
+    const result = updateStateWithUser(session, null, cachedUser);
+    expect(result.user).toEqual(cachedUser);
+    expect(result.isAdmin).toBe(true);
+    expect(result.isPartner).toBe(false);
+  });
+
+  it('should use cached partner user when fetchUser fails', () => {
+    const session: Session = { user: { id: 'partner-1' } };
+    const cachedUser: User = { id: 'partner-1', role: 'partner' };
+    const result = updateStateWithUser(session, null, cachedUser);
+    expect(result.user).toEqual(cachedUser);
+    expect(result.isPartner).toBe(true);
+    expect(result.isAdmin).toBe(false);
+  });
+
+  it('should use cached sub_partner user when fetchUser fails', () => {
+    const session: Session = { user: { id: 'sub-1' } };
+    const cachedUser: User = { id: 'sub-1', role: 'sub_partner' };
+    const result = updateStateWithUser(session, null, cachedUser);
+    expect(result.user).toEqual(cachedUser);
+    expect(result.isSubPartner).toBe(true);
+    expect(result.isAdmin).toBe(false);
+  });
+
+  it('should NOT use cached user when session user ID differs', () => {
+    const session: Session = { user: { id: 'new-user' } };
+    const cachedUser: User = { id: 'old-user', role: 'admin' };
+    const result = updateStateWithUser(session, null, cachedUser);
+    expect(result.user).toBeNull();
+    expect(result.isAdmin).toBe(false);
+  });
+
+  it('should NOT use cached user when no session', () => {
+    const cachedUser: User = { id: 'admin-1', role: 'admin' };
+    const result = updateStateWithUser(null, null, cachedUser);
+    expect(result.user).toBeNull();
+    expect(result.isAdmin).toBe(false);
+  });
+
+  it('should use fresh user when fetchUser succeeds', () => {
+    const session: Session = { user: { id: 'admin-1' } };
+    const freshUser: User = { id: 'admin-1', role: 'admin' };
+    const cachedUser: User = { id: 'admin-1', role: 'admin' };
+    const result = updateStateWithUser(session, freshUser, cachedUser);
+    expect(result.user).toEqual(freshUser);
+    expect(result.isAdmin).toBe(true);
+  });
+
+  it('should handle no cached user on first load', () => {
+    const session: Session = { user: { id: 'admin-1' } };
+    const result = updateStateWithUser(session, null, null);
+    expect(result.user).toBeNull();
+    expect(result.isAdmin).toBe(false);
+  });
+});

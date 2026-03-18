@@ -30,7 +30,19 @@ import SubPartnerManagement from "./pages/partner/SubPartnerManagement";
 import Notifications from "./pages/Notifications";
 
 function AuthenticatedRoutes() {
-  const { isAdmin } = useAuth();
+  const { isAdmin, user } = useAuth();
+
+  // Guard: if user data hasn't loaded yet (e.g., fetchUser failed temporarily),
+  // show a loading spinner instead of defaulting to partner routes.
+  // This prevents the admin from seeing the partner dashboard when fetchUser
+  // fails due to timeout or network issues.
+  if (!user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      </div>
+    );
+  }
 
   if (isAdmin) {
     return (
@@ -72,7 +84,7 @@ function AuthenticatedRoutes() {
 }
 
 function AppRouter() {
-  const { session, loading, signOut } = useAuth();
+  const { session, user, loading, signOut } = useAuth();
   const [timedOut, setTimedOut] = useState(false);
 
   // Safety timeout: if loading takes more than 8 seconds, force show login
