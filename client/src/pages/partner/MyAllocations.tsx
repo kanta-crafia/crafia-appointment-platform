@@ -21,8 +21,12 @@ export default function MyAllocations() {
   const [detailProject, setDetailProject] = useState<Project | null>(null);
   const [showDetail, setShowDetail] = useState(false);
 
+  // Stabilize dependency: use primitive values instead of user object
+  const userOrgId = user?.org_id;
+  const userRole = user?.role;
+
   const fetchAllocations = useCallback(async () => {
-    if (!user) {
+    if (!userOrgId) {
       setLoading(false);
       return;
     }
@@ -32,7 +36,7 @@ export default function MyAllocations() {
       const { data: myOrg } = await supabase
         .from('organizations')
         .select('id, parent_org_id')
-        .eq('id', user.org_id)
+        .eq('id', userOrgId)
         .single();
 
       let directAllocations: Allocation[] = [];
@@ -42,12 +46,12 @@ export default function MyAllocations() {
       const { data: directData } = await supabase
         .from('allocations')
         .select('*, project:projects(*)')
-        .eq('child_org_id', user.org_id)
+        .eq('child_org_id', userOrgId)
         .order('created_at', { ascending: false });
       directAllocations = directData || [];
 
       // 2. sub_partnerの場合、親企業のallocationsも継承
-      if (user.role === 'sub_partner' && myOrg?.parent_org_id) {
+      if (userRole === 'sub_partner' && myOrg?.parent_org_id) {
         const { data: parentAllocData } = await supabase
           .from('allocations')
           .select('*, project:projects(*)')
@@ -69,7 +73,7 @@ export default function MyAllocations() {
             .from('sub_allocation_prices')
             .select('*')
             .in('allocation_id', parentAllocIds)
-            .eq('sub_org_id', user.org_id);
+            .eq('sub_org_id', userOrgId);
 
           const priceMap = new Map<string, number>();
           (priceData || []).forEach((p: SubAllocationPrice) => {
@@ -96,7 +100,7 @@ export default function MyAllocations() {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [userOrgId, userRole]);
 
   useEffect(() => { fetchAllocations(); }, [fetchAllocations]);
 

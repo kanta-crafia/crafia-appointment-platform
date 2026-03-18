@@ -22,6 +22,8 @@ import { format } from 'date-fns';
 
 export default function SubPartnerManagement() {
   const { user } = useAuth();
+  // Stabilize dependency
+  const userOrgId = user?.org_id;
   const [subOrgs, setSubOrgs] = useState<Organization[]>([]);
   const [subUsers, setSubUsers] = useState<Record<string, { login_id: string; full_name: string | null; plain_password: string | null }[]>>({});
   const [subAppointments, setSubAppointments] = useState<Appointment[]>([]);
@@ -60,14 +62,14 @@ export default function SubPartnerManagement() {
   const [savingPrices, setSavingPrices] = useState(false);
 
   const fetchData = useCallback(async () => {
-    if (!user) return;
+    if (!userOrgId) return;
     setLoading(true);
     try {
       // Get sub organizations (children of current org)
       const { data: orgs } = await supabase
         .from('organizations')
         .select('*')
-        .eq('parent_org_id', user.org_id)
+        .eq('parent_org_id', userOrgId)
         .eq('status', 'active');
       const subOrgList = orgs || [];
       setSubOrgs(subOrgList);
@@ -105,7 +107,7 @@ export default function SubPartnerManagement() {
       const { data: payData } = await supabase
         .from('sub_partner_payments')
         .select('*, sub_org:organizations!sub_partner_payments_sub_org_id_fkey(name)')
-        .eq('parent_org_id', user.org_id)
+        .eq('parent_org_id', userOrgId)
         .order('period', { ascending: false });
       setPayments(payData || []);
 
@@ -113,7 +115,7 @@ export default function SubPartnerManagement() {
       const { data: allocData } = await supabase
         .from('allocations')
         .select('*, project:projects(title, project_number, status)')
-        .eq('child_org_id', user.org_id);
+        .eq('child_org_id', userOrgId);
       setParentAllocations(allocData || []);
 
       // Get sub allocation prices for sub orgs
@@ -128,7 +130,7 @@ export default function SubPartnerManagement() {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [userOrgId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 

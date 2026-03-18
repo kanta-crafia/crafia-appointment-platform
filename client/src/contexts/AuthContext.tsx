@@ -39,22 +39,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Track if we've already initialized to prevent double-init
   const initRef = useRef(false);
+  // Track if a fetch is in progress to prevent concurrent fetches
+  const fetchingRef = useRef(false);
+  // Cache the last user ID to avoid unnecessary re-fetches
+  const lastUserIdRef = useRef<string | null>(null);
 
   const fetchUser = useCallback(async (userId: string): Promise<User | null> => {
     try {
-      const { data, error } = await supabase
+      const query = supabase
         .from('users')
         .select('*')
         .eq('id', userId)
         .single();
-      if (error || !data) return null;
-      return data as User;
+      const result = await withTimeout(
+        Promise.resolve(query),
+        8000 // 8 second timeout for user fetch
+      );
+      if (!result || result.error || !result.data) return null;
+      return result.data as User;
     } catch {
       return null;
     }
   }, []);
 
   const updateStateWithUser = useCallback((session: Session | null, user: User | null) => {
+    lastUserIdRef.current = user?.id || null;
     setState({
       session,
       user,
@@ -127,10 +136,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      // For TOKEN_REFRESHED events, only update the session, not re-fetch the user
+      // This prevents unnecessary re-renders and data re-fetches across all pages
+      if (event === 'TOKEN_REFRESHED' && session?.user) {
+        const userId = session.user.id;
+        // If it's the same user, just update the session without re-fetching
+        if (userId === lastUserIdRef.current) {
+          setState(prev => ({
+            ...prev,
+            session,
+            // Keep the existing user object to maintain referential stability
+          }));
+          return;
+        }
+      }
+
       if (session?.user) {
-        const user = await fetchUser(session.user.id);
-        if (!cancelled) {
-          updateStateWithUser(session, user);
+        // Prevent concurrent user fetches
+        if (fetchingRef.current) return;
+        fetchingRef.current = true;
+        
+        try {
+          const user = await fetchUser(session.user.id);
+          if (!cancelled) {
+            updateStateWithUser(session, user);
+          }
+        } finally {
+          fetchingRef.current = false;
         }
       } else if (event === 'INITIAL_SESSION' && !session) {
         // No session on initial load
@@ -152,8 +184,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const checkSession = async () => {
       try {
-        const { data, error } = await supabase.auth.getSession();
-        if (error || !data.session) {
+        const result = await withTimeout(
+          supabase.auth.getSession(),
+          5000
+        );
+        if (!result || !result.data?.session) {
           console.warn('[Auth] Session expired during health check, signing out');
           updateStateWithUser(null, null);
         }

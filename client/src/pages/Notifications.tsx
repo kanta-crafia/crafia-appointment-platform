@@ -31,8 +31,11 @@ export default function Notifications() {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [calendarOpen, setCalendarOpen] = useState(false);
 
+  // Stabilize dependency
+  const userId = user?.id;
+
   const fetchNotifications = useCallback(async () => {
-    if (!user) {
+    if (!userId) {
       setLoading(false);
       return;
     }
@@ -44,7 +47,7 @@ export default function Notifications() {
       const { data } = await supabase
         .from('notifications')
         .select('*')
-        .eq('recipient_user_id', user.id)
+        .eq('recipient_user_id', userId)
         .gte('created_at', dayStart)
         .lte('created_at', dayEnd)
         .order('created_at', { ascending: false });
@@ -54,7 +57,7 @@ export default function Notifications() {
     } finally {
       setLoading(false);
     }
-  }, [user, selectedDate]);
+  }, [userId, selectedDate]);
 
   useEffect(() => { fetchNotifications(); }, [fetchNotifications]);
 

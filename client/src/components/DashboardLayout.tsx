@@ -27,29 +27,33 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [unreadCount, setUnreadCount] = useState(0);
   const [hasSubOrgs, setHasSubOrgs] = useState(false);
 
+  // Stabilize dependency: use primitive values instead of user object
+  const userId = user?.id;
+  const userOrgId = user?.org_id;
+
   const fetchUnread = useCallback(async () => {
-    if (!user) return;
+    if (!userId) return;
     try {
       const { count } = await supabase
         .from('notifications')
         .select('*', { count: 'exact', head: true })
-        .eq('recipient_user_id', user.id)
+        .eq('recipient_user_id', userId)
         .eq('is_read', false);
       setUnreadCount(count || 0);
     } catch (e) {
       console.error('Notification count fetch error:', e);
     }
-  }, [user]);
+  }, [userId]);
 
   // Check if current partner has sub-organizations
   useEffect(() => {
-    if (!user || isAdmin) return;
+    if (!userOrgId || isAdmin) return;
     const checkSubOrgs = async () => {
       try {
         const { count } = await supabase
           .from('organizations')
           .select('*', { count: 'exact', head: true })
-          .eq('parent_org_id', user.org_id)
+          .eq('parent_org_id', userOrgId)
           .eq('status', 'active');
         setHasSubOrgs((count || 0) > 0);
       } catch (e) {
@@ -57,7 +61,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       }
     };
     checkSubOrgs();
-  }, [user, isAdmin]);
+  }, [userOrgId, isAdmin]);
 
   useEffect(() => {
     fetchUnread();

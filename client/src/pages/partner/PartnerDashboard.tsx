@@ -11,8 +11,13 @@ export default function PartnerDashboard() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Stabilize dependency: use primitive values instead of user object
+  const userId = user?.id;
+  const userOrgId = user?.org_id;
+  const userRole = user?.role;
+
   const fetchData = useCallback(async () => {
-    if (!user) {
+    if (!userId || !userOrgId) {
       setLoading(false);
       return;
     }
@@ -22,21 +27,21 @@ export default function PartnerDashboard() {
       const { data: myOrg } = await supabase
         .from('organizations')
         .select('id, parent_org_id')
-        .eq('id', user.org_id)
+        .eq('id', userOrgId)
         .single();
 
       // 1. 自分の組織に直接割り当てられた案件
       const { data: directAllocs } = await supabase
         .from('allocations')
         .select('*, project:projects(*)')
-        .eq('child_org_id', user.org_id)
+        .eq('child_org_id', userOrgId)
         .eq('status', 'active');
       const directAllocations = directAllocs || [];
 
       let allAllocs = [...directAllocations];
 
       // 2. sub_partnerの場合、親企業のallocationsも継承
-      if (user.role === 'sub_partner' && myOrg?.parent_org_id) {
+      if (userRole === 'sub_partner' && myOrg?.parent_org_id) {
         const { data: parentAllocData } = await supabase
           .from('allocations')
           .select('*, project:projects(*)')
@@ -53,7 +58,7 @@ export default function PartnerDashboard() {
       const { data: apptData } = await supabase
         .from('appointments')
         .select('*')
-        .eq('org_id', user.org_id);
+        .eq('org_id', userOrgId);
 
       setAllocations(allAllocs);
       setAppointments(apptData || []);
@@ -62,7 +67,7 @@ export default function PartnerDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [userId, userOrgId, userRole]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 

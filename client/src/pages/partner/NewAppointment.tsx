@@ -41,8 +41,13 @@ export default function NewAppointment() {
   const [acquiredCompanyName, setAcquiredCompanyName] = useState('client');
   const [showProjectDetail, setShowProjectDetail] = useState(false);
 
+  // Stabilize dependency: use user.id + user.org_id instead of user object
+  const userId = user?.id;
+  const userOrgId = user?.org_id;
+  const userRole = user?.role;
+
   const fetchAllocations = useCallback(async () => {
-    if (!user) {
+    if (!userId || !userOrgId) {
       setLoading(false);
       return;
     }
@@ -52,7 +57,7 @@ export default function NewAppointment() {
       const { data: myOrg } = await supabase
         .from('organizations')
         .select('id, parent_org_id')
-        .eq('id', user.org_id)
+        .eq('id', userOrgId)
         .single();
 
       let allAllocs: AllocationWithPrice[] = [];
@@ -61,12 +66,12 @@ export default function NewAppointment() {
       const { data: directData } = await supabase
         .from('allocations')
         .select('*, project:projects(*)')
-        .eq('child_org_id', user.org_id)
+        .eq('child_org_id', userOrgId)
         .eq('status', 'active');
       const directAllocations = directData || [];
 
       // 2. sub_partnerの場合、親企業のallocationsも継承
-      if (user.role === 'sub_partner' && myOrg?.parent_org_id) {
+      if (userRole === 'sub_partner' && myOrg?.parent_org_id) {
         const { data: parentAllocData } = await supabase
           .from('allocations')
           .select('*, project:projects(*)')
@@ -84,7 +89,7 @@ export default function NewAppointment() {
             .from('sub_allocation_prices')
             .select('*')
             .in('allocation_id', parentAllocIds)
-            .eq('sub_org_id', user.org_id);
+            .eq('sub_org_id', userOrgId);
 
           const priceMap = new Map<string, number>();
           (priceData || []).forEach((p: SubAllocationPrice) => {
@@ -113,7 +118,7 @@ export default function NewAppointment() {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [userId, userOrgId, userRole]);
 
   useEffect(() => { fetchAllocations(); }, [fetchAllocations]);
 
@@ -196,9 +201,9 @@ export default function NewAppointment() {
       setSaving(false);
       toast.error('登録に失敗しました', { description: error.message });
     } else {
-      // アポ登録成功後にメール通知を送信（ページ遷移前に完了を待つ）
+      // アポ登録成功 → 即座にページ遷移（メール送信は非同期で行い、ユーザーを待たせない）
       const projectTitle = selectedProject?.title || '不明な案件';
-      await sendEmailNotification(projectTitle);
+      sendEmailNotification(projectTitle).catch(e => console.warn('[Email] Background send failed:', e));
 
       setSaving(false);
       toast.success('アポイントを登録しました', { description: '承認待ちの状態です' });

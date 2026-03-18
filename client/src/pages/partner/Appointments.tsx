@@ -33,6 +33,10 @@ export default function PartnerAppointments() {
   const { user } = useAuth();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Stabilize dependency: use primitive values instead of user object
+  const userId = user?.id;
+  const userOrgId = user?.org_id;
   const [tab, setTab] = useState('all');
   const [showDetail, setShowDetail] = useState(false);
   const [selectedAppt, setSelectedAppt] = useState<Appointment | null>(null);
@@ -55,7 +59,7 @@ export default function PartnerAppointments() {
   const [childOrgNames, setChildOrgNames] = useState<Record<string, string>>({});
 
   const fetchAppointments = useCallback(async () => {
-    if (!user) {
+    if (!userId || !userOrgId) {
       setLoading(false);
       return;
     }
@@ -65,7 +69,7 @@ export default function PartnerAppointments() {
       const { data: childOrgs } = await supabase
         .from('organizations')
         .select('id, name')
-        .eq('parent_org_id', user.org_id);
+        .eq('parent_org_id', userOrgId);
 
       const childOrgIds = (childOrgs || []).map(o => o.id);
       const orgNameMap: Record<string, string> = {};
@@ -73,7 +77,7 @@ export default function PartnerAppointments() {
       setChildOrgNames(orgNameMap);
 
       // 自組織 + 子組織のアポを取得
-      const allOrgIds = [user.org_id, ...childOrgIds];
+      const allOrgIds = [userOrgId, ...childOrgIds];
       const { data } = await supabase
         .from('appointments')
         .select('*, project:projects(title, project_number), organization:organizations(name)')
@@ -85,7 +89,7 @@ export default function PartnerAppointments() {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [userId, userOrgId]);
 
   useEffect(() => { fetchAppointments(); }, [fetchAppointments]);
 
