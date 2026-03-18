@@ -11,7 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
-import { ArrowLeft, Loader2 } from 'lucide-react';
+import { ArrowLeft, Loader2, FileText, ChevronDown, ChevronUp } from 'lucide-react';
 import { Link } from 'wouter';
 
 interface AllocationWithPrice extends Allocation {
@@ -39,6 +39,7 @@ export default function NewAppointment() {
   const [acquisitionDate, setAcquisitionDate] = useState('');
   const [acquirerName, setAcquirerName] = useState('');
   const [acquiredCompanyName, setAcquiredCompanyName] = useState('client');
+  const [showProjectDetail, setShowProjectDetail] = useState(false);
 
   const fetchAllocations = useCallback(async () => {
     if (!user) {
@@ -358,7 +359,25 @@ export default function NewAppointment() {
 
             <div className="space-y-2">
               <Label>メモ <span className="text-destructive">*</span></Label>
-              <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={"補足情報を記入\n・先方ニーズ/課題\n・取得チャネル\n・温度感　など・・・"} rows={5} required />
+              {selectedProject?.project_detail && (
+                <div className="mb-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowProjectDetail(!showProjectDetail)}
+                    className="inline-flex items-center gap-1.5 text-sm text-primary hover:text-primary/80 transition-colors font-medium"
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    案件詳細を{showProjectDetail ? '閉じる' : '表示'}
+                    {showProjectDetail ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                  </button>
+                  {showProjectDetail && (
+                    <div className="mt-2 p-3 bg-muted/40 border border-border rounded-lg text-sm whitespace-pre-wrap text-foreground/80">
+                      {selectedProject.project_detail}
+                    </div>
+                  )}
+                </div>
+              )}
+              <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={"\u88dc\u8db3\u60c5\u5831\u3092\u8a18\u5165\n\u30fb\u5148\u65b9\u30cb\u30fc\u30ba/\u8ab2\u984c\n\u30fb\u53d6\u5f97\u30c1\u30e3\u30cd\u30eb\n\u30fb\u6e29\u5ea6\u611f\u3000\u306a\u3069\u30fb\u30fb\u30fb"} rows={5} required />
             </div>
 
             <div className="flex gap-3 pt-2">
