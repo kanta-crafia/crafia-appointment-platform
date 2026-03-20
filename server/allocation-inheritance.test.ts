@@ -248,6 +248,60 @@ describe('割り当て案件の自動継承システム', () => {
     });
   });
 
+  describe('二次代理店判定（組織階層ベース）', () => {
+    // 組織階層で二次代理店を判定するロジック
+    interface Org {
+      id: string;
+      name: string;
+      parent_org_id: string | null;
+    }
+
+    function isSecondTierOrg(org: Org, allOrgs: Org[]): boolean {
+      if (!org.parent_org_id) return false;
+      const parent = allOrgs.find(o => o.id === org.parent_org_id);
+      return !!parent?.parent_org_id;
+    }
+
+    const orgs: Org[] = [
+      { id: 'crafia-hq', name: 'Crafia本部', parent_org_id: null },
+      { id: 'useful', name: '株式会社useful', parent_org_id: 'crafia-hq' },
+      { id: 'useful-direct', name: 'useful（直採）', parent_org_id: 'useful' },
+      { id: 'resta', name: '株式会社Resta', parent_org_id: 'useful' },
+    ];
+
+    it('Crafia本部は二次代理店ではない', () => {
+      const crafia = orgs.find(o => o.id === 'crafia-hq')!;
+      expect(isSecondTierOrg(crafia, orgs)).toBe(false);
+    });
+
+    it('一次代理店（useful）は二次代理店ではない（親がCrafia本部）', () => {
+      const useful = orgs.find(o => o.id === 'useful')!;
+      expect(isSecondTierOrg(useful, orgs)).toBe(false);
+    });
+
+    it('二次代理店（useful直採）は二次代理店と判定される（親の親が存在）', () => {
+      const usefulDirect = orgs.find(o => o.id === 'useful-direct')!;
+      expect(isSecondTierOrg(usefulDirect, orgs)).toBe(true);
+    });
+
+    it('二次代理店（Resta）は二次代理店と判定される', () => {
+      const resta = orgs.find(o => o.id === 'resta')!;
+      expect(isSecondTierOrg(resta, orgs)).toBe(true);
+    });
+
+    it('roleに依存せず、組織階層で判定する（partnerロールでも二次代理店なら継承する）', () => {
+      // roleが'partner'でも、組織階層が二次代理店なら継承すべき
+      const usefulDirect = orgs.find(o => o.id === 'useful-direct')!;
+      const isSecondTier = isSecondTierOrg(usefulDirect, orgs);
+      expect(isSecondTier).toBe(true);
+      // 二次代理店なら親のアロケーションを継承
+      if (isSecondTier) {
+        const result = computeInheritedAllocations([], parentAllocations, [], usefulDirect.id);
+        expect(result).toHaveLength(4);
+      }
+    });
+  });
+
   describe('卸単価の設定', () => {
     it('カスタム卸単価が設定されていない場合、親の卸単価が使われる', () => {
       const result = computeInheritedAllocations([], parentAllocations, [], subOrgId);

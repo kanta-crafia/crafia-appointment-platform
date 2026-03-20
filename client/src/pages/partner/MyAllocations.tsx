@@ -50,8 +50,19 @@ export default function MyAllocations() {
         .order('created_at', { ascending: false });
       directAllocations = directData || [];
 
-      // 2. sub_partnerの場合、親企業のallocationsも継承
-      if (userRole === 'sub_partner' && myOrg?.parent_org_id) {
+      // 2. 二次代理店（親組織がCrafia本部でない＝親の親が存在する）の場合、親企業のallocationsも継承
+      // roleに依存せず、組織階層で判定する
+      let isSecondTier = false;
+      if (myOrg?.parent_org_id) {
+        const { data: parentOrg } = await supabase
+          .from('organizations')
+          .select('id, parent_org_id')
+          .eq('id', myOrg.parent_org_id)
+          .single();
+        // 親組織にさらに親がある = 二次代理店
+        isSecondTier = !!parentOrg?.parent_org_id;
+      }
+      if (isSecondTier && myOrg?.parent_org_id) {
         const { data: parentAllocData } = await supabase
           .from('allocations')
           .select('*, project:projects(*)')
