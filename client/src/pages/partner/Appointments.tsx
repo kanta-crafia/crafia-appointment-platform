@@ -176,7 +176,8 @@ export default function PartnerAppointments() {
       if (editAcquisitionDate !== ((editAppt as any).acquisition_date || '')) changes.push(`獲得日を変更`);
       if (editAcquirerName !== ((editAppt as any).acquirer_name || '')) changes.push(`獲得者名: ${(editAppt as any).acquirer_name || '—'} → ${editAcquirerName}`);
 
-      if (changes.length === 0) {
+      // cancelledアポの場合、フィールド変更がなくても再承認申請（ステータス変更）を許可
+      if (changes.length === 0 && editAppt.status !== 'cancelled') {
         toast.info('変更はありません');
         setSaving(false);
         return;
@@ -196,7 +197,8 @@ export default function PartnerAppointments() {
       };
       if (editAppt.status === 'cancelled') {
         updateData.status = 'pending';
-        changes.push('ステータスを保留中に戻しました（再承認が必要です）');
+        updateData.rejected_reason = null;
+        changes.push('取消から再承認申請（ステータスを保留中に変更）');
       }
 
       const { error } = await supabase
@@ -233,7 +235,11 @@ export default function PartnerAppointments() {
         console.warn('Edit notification email failed:', emailErr);
       }
 
-      toast.success('アポイントを更新しました');
+      if (editAppt.status === 'cancelled') {
+        toast.success('再承認を申請しました。Crafia本部に通知されます。');
+      } else {
+        toast.success('アポイントを更新しました');
+      }
       setShowEdit(false);
       setShowDetail(false);
       await fetchAppointments();
@@ -600,7 +606,7 @@ export default function PartnerAppointments() {
       <Dialog open={showEdit} onOpenChange={setShowEdit}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>アポイント編集</DialogTitle>
+            <DialogTitle>{editAppt?.status === 'cancelled' ? '日程修正して再承認を申請' : 'アポイント編集'}</DialogTitle>
           </DialogHeader>
           {editAppt && (
             <div className="space-y-4 py-2">
@@ -645,7 +651,7 @@ export default function PartnerAppointments() {
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => setShowEdit(false)} disabled={saving || deleting}>キャンセル</Button>
               <Button onClick={handleSaveEdit} disabled={saving || deleting}>
-                {saving ? '保存中...' : '保存する'}
+                {saving ? '保存中...' : editAppt?.status === 'cancelled' ? '再承認を申請する' : '保存する'}
               </Button>
             </div>
           </DialogFooter>
