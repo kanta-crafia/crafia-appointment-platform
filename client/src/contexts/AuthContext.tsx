@@ -1,6 +1,12 @@
 import { createContext, useContext, useEffect, useState, useCallback, useRef, type ReactNode } from 'react';
-import { supabase, type User } from '@/lib/supabase';
+import { supabase, type User, type UserRole } from '@/lib/supabase';
 import type { Session } from '@supabase/supabase-js';
+
+/** partner系ロール（一次〜四次代理店）かどうかを判定 */
+const PARTNER_ROLES: UserRole[] = ['partner', 'sub_partner', 'tier3_partner', 'tier4_partner'];
+function isPartnerRole(role?: string): boolean {
+  return PARTNER_ROLES.includes(role as UserRole);
+}
 
 interface AuthState {
   session: Session | null;
@@ -88,8 +94,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 user: retryUser,
                 loading: false,
                 isAdmin: retryUser.role === 'admin',
-                isPartner: retryUser.role === 'partner',
-                isSubPartner: retryUser.role === 'sub_partner',
+                isPartner: isPartnerRole(retryUser.role),
+                isSubPartner: retryUser.role === 'sub_partner' || retryUser.role === 'tier3_partner' || retryUser.role === 'tier4_partner',
               });
             }
           }
@@ -109,8 +115,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       loading: false,
       isAdmin: user?.role === 'admin' || false,
-      isPartner: user?.role === 'partner' || false,
-      isSubPartner: user?.role === 'sub_partner' || false,
+      isPartner: isPartnerRole(user?.role) || false,
+      isSubPartner: user?.role === 'sub_partner' || user?.role === 'tier3_partner' || user?.role === 'tier4_partner' || false,
     });
   }, [fetchUser]);
 
@@ -304,8 +310,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           ...prev,
           user,
           isAdmin: user.role === 'admin',
-          isPartner: user.role === 'partner',
-          isSubPartner: user.role === 'sub_partner',
+          isPartner: isPartnerRole(user.role),
+          isSubPartner: user.role === 'sub_partner' || user.role === 'tier3_partner' || user.role === 'tier4_partner',
         }));
       }
     }

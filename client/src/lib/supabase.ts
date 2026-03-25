@@ -46,7 +46,7 @@ if (typeof document !== 'undefined') {
 }
 
 // Types based on our DB schema
-export type UserRole = 'admin' | 'partner' | 'sub_partner' | 'approver';
+export type UserRole = 'admin' | 'partner' | 'sub_partner' | 'tier3_partner' | 'tier4_partner' | 'approver';
 export type ProjectStatus = 'active' | 'inactive' | 'closed';
 export type AllocationStatus = 'active' | 'inactive';
 export type AppointmentStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';

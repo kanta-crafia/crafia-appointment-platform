@@ -45,7 +45,7 @@ export default function Organizations() {
   const [createLoginId, setCreateLoginId] = useState('');
   const [createFullName, setCreateFullName] = useState('');
   const [createEmail, setCreateEmail] = useState('');
-  const [createRole, setCreateRole] = useState<'partner' | 'sub_partner'>('partner');
+  const [createRole, setCreateRole] = useState<'partner' | 'sub_partner' | 'tier3_partner' | 'tier4_partner'>('partner');
   const [createPassword, setCreatePassword] = useState('');
 
   // User edit form states
@@ -115,6 +115,8 @@ export default function Organizations() {
       case 'admin': return 'Admin';
       case 'partner': return 'Partner';
       case 'sub_partner': return 'SubPartner';
+      case 'tier3_partner': return '3次代理店';
+      case 'tier4_partner': return '4次代理店';
       default: return role;
     }
   };
@@ -580,11 +582,13 @@ export default function Organizations() {
             </div>
             <div className="space-y-2">
               <Label>ロール</Label>
-              <Select value={createRole} onValueChange={(v) => setCreateRole(v as 'partner' | 'sub_partner')}>
+              <Select value={createRole} onValueChange={(v) => setCreateRole(v as 'partner' | 'sub_partner' | 'tier3_partner' | 'tier4_partner')}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="partner">Partner（一次代理店）</SelectItem>
                   <SelectItem value="sub_partner">SubPartner（二次代理店）</SelectItem>
+                  <SelectItem value="tier3_partner">3次代理店</SelectItem>
+                  <SelectItem value="tier4_partner">4次代理店</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -649,6 +653,8 @@ export default function Organizations() {
                     <SelectItem value="admin">Admin（管理者）</SelectItem>
                     <SelectItem value="partner">Partner（一次代理店）</SelectItem>
                     <SelectItem value="sub_partner">SubPartner（二次代理店）</SelectItem>
+                    <SelectItem value="tier3_partner">3次代理店</SelectItem>
+                    <SelectItem value="tier4_partner">4次代理店</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

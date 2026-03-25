@@ -314,4 +314,13 @@
 ## v3.5.14 バグ修正: usefulの下に新規作成した代理店に案件が共有されない
 - [x] DB調査（organizations, allocations, 継承ロジック）
 - [x] 問題の修正（role依存→組織階層依存に変更）
+- [x] GitHubプッシュ・Vercelデプロイ
+
+## v3.5.15 機能追加: ロール選択を4次代理店まで拡張
+- [x] 現在のロール定義・DB・UI実装を調査
+- [x] DBのroleカラム（text型のため変更不要）
+- [x] 型定義（supabase.ts）を更新（tier3_partner, tier4_partner追加）
+- [x] ユーザー作成・編集画面のロール選択UIを更新
+- [x] AuthContextのisPartner/isSubPartner判定を新ロール対応
+- [x] テスト追加・実行（68件全パス）
 - [ ] GitHubプッシュ・Vercelデプロイ

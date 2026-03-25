@@ -89,14 +89,19 @@ describe('Auth state transitions', () => {
     isSubPartner: boolean;
   }
 
+  const PARTNER_ROLES = ['partner', 'sub_partner', 'tier3_partner', 'tier4_partner'];
+  function isPartnerRole(role?: string): boolean {
+    return PARTNER_ROLES.includes(role as string);
+  }
+
   function computeState(session: unknown, user: { role?: string } | null): AuthState {
     return {
       session,
       user,
       loading: false,
       isAdmin: user?.role === 'admin' || false,
-      isPartner: user?.role === 'partner' || false,
-      isSubPartner: user?.role === 'sub_partner' || false,
+      isPartner: isPartnerRole(user?.role) || false,
+      isSubPartner: user?.role === 'sub_partner' || user?.role === 'tier3_partner' || user?.role === 'tier4_partner' || false,
     };
   }
 
@@ -122,7 +127,21 @@ describe('Auth state transitions', () => {
   it('should detect sub_partner role', () => {
     const state = computeState({ user: { id: '3' } }, { role: 'sub_partner' });
     expect(state.isAdmin).toBe(false);
-    expect(state.isPartner).toBe(false);
+    expect(state.isPartner).toBe(true);
+    expect(state.isSubPartner).toBe(true);
+  });
+
+  it('should detect tier3_partner role', () => {
+    const state = computeState({ user: { id: '4' } }, { role: 'tier3_partner' });
+    expect(state.isAdmin).toBe(false);
+    expect(state.isPartner).toBe(true);
+    expect(state.isSubPartner).toBe(true);
+  });
+
+  it('should detect tier4_partner role', () => {
+    const state = computeState({ user: { id: '5' } }, { role: 'tier4_partner' });
+    expect(state.isAdmin).toBe(false);
+    expect(state.isPartner).toBe(true);
     expect(state.isSubPartner).toBe(true);
   });
 
@@ -151,6 +170,11 @@ describe('Cached user fallback on fetchUser failure', () => {
     user: { id: string };
   }
 
+  const PARTNER_ROLES_2 = ['partner', 'sub_partner', 'tier3_partner', 'tier4_partner'];
+  function isPartnerRole2(role?: string): boolean {
+    return PARTNER_ROLES_2.includes(role as string);
+  }
+
   function updateStateWithUser(
     session: Session | null,
     user: User | null,
@@ -164,8 +188,8 @@ describe('Cached user fallback on fetchUser failure', () => {
     return {
       user,
       isAdmin: user?.role === 'admin' || false,
-      isPartner: user?.role === 'partner' || false,
-      isSubPartner: user?.role === 'sub_partner' || false,
+      isPartner: isPartnerRole2(user?.role) || false,
+      isSubPartner: user?.role === 'sub_partner' || user?.role === 'tier3_partner' || user?.role === 'tier4_partner' || false,
     };
   }
 
