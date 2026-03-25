@@ -40,30 +40,42 @@ export default function PartnerDashboard() {
 
       let allAllocs = [...directAllocations];
 
-      // 2. 二次代理店（親組織がCrafia本部でない）の場合、親企業のallocationsも継承
-      // roleに依存せず、組織階層で判定する
-      let isSecondTier = false;
-      if (myOrg?.parent_org_id) {
-        const { data: parentOrg } = await supabase
-          .from('organizations')
-          .select('id, parent_org_id')
-          .eq('id', myOrg.parent_org_id)
-          .single();
-        // 親組織にさらに親がある = 二次代理店
-        isSecondTier = !!parentOrg?.parent_org_id;
-      }
-      if (isSecondTier && myOrg?.parent_org_id) {
-        const { data: parentAllocData } = await supabase
-          .from('allocations')
-          .select('*, project:projects(*)')
-          .eq('child_org_id', myOrg.parent_org_id)
-          .eq('status', 'active');
+      // 2. 祖先チェーンを再帰的にたどり、アロケーションを継承する
+      const directProjectIds = new Set(directAllocations.map(a => a.project_id));
+      const collectedProjectIds = new Set(directProjectIds);
 
-        const directProjectIds = new Set(directAllocations.map(a => a.project_id));
-        const parentAllocations = (parentAllocData || []).filter(
-          a => !directProjectIds.has(a.project_id)
-        );
-        allAllocs = [...allAllocs, ...parentAllocations];
+      if (myOrg?.parent_org_id) {
+        const ancestorOrgIds: string[] = [];
+        let currentParentId: string | null = myOrg.parent_org_id;
+        const maxDepth = 10;
+        let depth = 0;
+        while (currentParentId && depth < maxDepth) {
+          const { data: ancestorOrg } = await supabase
+            .from('organizations')
+            .select('id, parent_org_id')
+            .eq('id', currentParentId)
+            .single();
+          if (!ancestorOrg) break;
+          if (ancestorOrg.parent_org_id) {
+            ancestorOrgIds.push(ancestorOrg.id);
+          }
+          currentParentId = ancestorOrg.parent_org_id;
+          depth++;
+        }
+
+        for (const ancestorId of ancestorOrgIds) {
+          const { data: ancestorAllocData } = await supabase
+            .from('allocations')
+            .select('*, project:projects(*)')
+            .eq('child_org_id', ancestorId)
+            .eq('status', 'active');
+
+          const newAllocations = (ancestorAllocData || []).filter(
+            a => !collectedProjectIds.has(a.project_id)
+          );
+          allAllocs = [...allAllocs, ...newAllocations];
+          newAllocations.forEach(a => collectedProjectIds.add(a.project_id));
+        }
       }
 
       const { data: apptData } = await supabase

@@ -323,4 +323,12 @@
 - [x] ユーザー作成・編集画面のロール選択UIを更新
 - [x] AuthContextのisPartner/isSubPartner判定を新ロール対応
 - [x] テスト追加・実行（68件全パス）
+- [x] GitHubプッシュ・Vercelデプロイ
+
+## v3.5.15 バグ修正: users_role_check制約エラー
+- [x] DBのCHECK制約を更新してtier3_partner/tier4_partnerを許可
+
+## v3.5.16 バグ修正: 3次・4次代理店の割り当て案件が表示されない
+- [x] DB調査（NPC直採・natural営業の組織階層・アロケーション確認）
+- [x] 案件継承ロジックの修正（祖先チェーン全体をたどる方式に変更）
 - [ ] GitHubプッシュ・Vercelデプロイ

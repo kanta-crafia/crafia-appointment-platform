@@ -50,52 +50,67 @@ export default function MyAllocations() {
         .order('created_at', { ascending: false });
       directAllocations = directData || [];
 
-      // 2. 二次代理店（親組織がCrafia本部でない＝親の親が存在する）の場合、親企業のallocationsも継承
-      // roleに依存せず、組織階層で判定する
-      let isSecondTier = false;
+      // 2. 祖先チェーンを再帰的にたどり、アロケーションを継承する
+      // 直接の親だけでなく、祖父母・曽祖父母...のアロケーションも継承
+      const directProjectIds = new Set(directAllocations.map(a => a.project_id));
+      const collectedProjectIds = new Set(directProjectIds);
+
       if (myOrg?.parent_org_id) {
-        const { data: parentOrg } = await supabase
-          .from('organizations')
-          .select('id, parent_org_id')
-          .eq('id', myOrg.parent_org_id)
-          .single();
-        // 親組織にさらに親がある = 二次代理店
-        isSecondTier = !!parentOrg?.parent_org_id;
-      }
-      if (isSecondTier && myOrg?.parent_org_id) {
-        const { data: parentAllocData } = await supabase
-          .from('allocations')
-          .select('*, project:projects(*)')
-          .eq('child_org_id', myOrg.parent_org_id)
-          .order('created_at', { ascending: false });
+        // 祖先チェーンを構築（Crafia本部まで遡る）
+        const ancestorOrgIds: string[] = [];
+        let currentParentId: string | null = myOrg.parent_org_id;
+        const maxDepth = 10; // 無限ループ防止
+        let depth = 0;
+        while (currentParentId && depth < maxDepth) {
+          const { data: ancestorOrg } = await supabase
+            .from('organizations')
+            .select('id, parent_org_id')
+            .eq('id', currentParentId)
+            .single();
+          if (!ancestorOrg) break;
+          // Crafia本部（parent_org_idがnull）は含めない
+          if (ancestorOrg.parent_org_id) {
+            ancestorOrgIds.push(ancestorOrg.id);
+          }
+          currentParentId = ancestorOrg.parent_org_id;
+          depth++;
+        }
 
-        // 直接割り当てに含まれるproject_idのセット（重複排除用）
-        const directProjectIds = new Set(directAllocations.map(a => a.project_id));
+        // 祖先のアロケーションを近い順に取得し、重複を排除しながら継承
+        for (const ancestorId of ancestorOrgIds) {
+          const { data: ancestorAllocData } = await supabase
+            .from('allocations')
+            .select('*, project:projects(*)')
+            .eq('child_org_id', ancestorId)
+            .order('created_at', { ascending: false });
 
-        // 親のallocationsから、直接割り当てにないものを継承
-        const parentAllocations = (parentAllocData || []).filter(
-          a => !directProjectIds.has(a.project_id)
-        );
+          const newAllocations = (ancestorAllocData || []).filter(
+            a => !collectedProjectIds.has(a.project_id)
+          );
 
-        if (parentAllocations.length > 0) {
-          // sub_allocation_pricesから自分の卸単価を取得
-          const parentAllocIds = parentAllocations.map(a => a.id);
-          const { data: priceData } = await supabase
-            .from('sub_allocation_prices')
-            .select('*')
-            .in('allocation_id', parentAllocIds)
-            .eq('sub_org_id', userOrgId);
+          if (newAllocations.length > 0) {
+            // sub_allocation_pricesから自分の卸単価を取得
+            const allocIds = newAllocations.map(a => a.id);
+            const { data: priceData } = await supabase
+              .from('sub_allocation_prices')
+              .select('*')
+              .in('allocation_id', allocIds)
+              .eq('sub_org_id', userOrgId);
 
-          const priceMap = new Map<string, number>();
-          (priceData || []).forEach((p: SubAllocationPrice) => {
-            priceMap.set(p.allocation_id, Number(p.payout_per_appointment));
-          });
+            const priceMap = new Map<string, number>();
+            (priceData || []).forEach((p: SubAllocationPrice) => {
+              priceMap.set(p.allocation_id, Number(p.payout_per_appointment));
+            });
 
-          inheritedAllocations = parentAllocations.map(a => ({
-            ...a,
-            // 卸単価が未設定の場合はnull（一次代理店の単価を見せない）
-            effectivePayoutPerAppointment: priceMap.has(a.id) ? priceMap.get(a.id)! : null,
-          }));
+            const inherited = newAllocations.map(a => ({
+              ...a,
+              effectivePayoutPerAppointment: priceMap.has(a.id) ? priceMap.get(a.id)! : null,
+            }));
+            inheritedAllocations = [...inheritedAllocations, ...inherited];
+
+            // 重複排除用に追加
+            newAllocations.forEach(a => collectedProjectIds.add(a.project_id));
+          }
         }
       }
 

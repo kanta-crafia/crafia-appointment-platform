@@ -70,49 +70,61 @@ export default function NewAppointment() {
         .eq('status', 'active');
       const directAllocations = directData || [];
 
-      // 2. 二次代理店（親組織がCrafia本部でない）の場合、親企業のallocationsも継承
-      // roleに依存せず、組織階層で判定する
-      let isSecondTier = false;
+      // 2. 祖先チェーンを再帰的にたどり、アロケーションを継承する
+      const directProjectIds = new Set(directAllocations.map(a => a.project_id));
+      const collectedProjectIds = new Set(directProjectIds);
+
       if (myOrg?.parent_org_id) {
-        const { data: parentOrg } = await supabase
-          .from('organizations')
-          .select('id, parent_org_id')
-          .eq('id', myOrg.parent_org_id)
-          .single();
-        // 親組織にさらに親がある = 二次代理店
-        isSecondTier = !!parentOrg?.parent_org_id;
-      }
-      if (isSecondTier && myOrg?.parent_org_id) {
-        const { data: parentAllocData } = await supabase
-          .from('allocations')
-          .select('*, project:projects(*)')
-          .eq('child_org_id', myOrg.parent_org_id)
-          .eq('status', 'active');
+        // 祖先チェーンを構築（Crafia本部まで遡る）
+        const ancestorOrgIds: string[] = [];
+        let currentParentId: string | null = myOrg.parent_org_id;
+        const maxDepth = 10;
+        let depth = 0;
+        while (currentParentId && depth < maxDepth) {
+          const { data: ancestorOrg } = await supabase
+            .from('organizations')
+            .select('id, parent_org_id')
+            .eq('id', currentParentId)
+            .single();
+          if (!ancestorOrg) break;
+          if (ancestorOrg.parent_org_id) {
+            ancestorOrgIds.push(ancestorOrg.id);
+          }
+          currentParentId = ancestorOrg.parent_org_id;
+          depth++;
+        }
 
-        const directProjectIds = new Set(directAllocations.map(a => a.project_id));
-        const parentAllocations = (parentAllocData || []).filter(
-          a => !directProjectIds.has(a.project_id)
-        );
+        for (const ancestorId of ancestorOrgIds) {
+          const { data: ancestorAllocData } = await supabase
+            .from('allocations')
+            .select('*, project:projects(*)')
+            .eq('child_org_id', ancestorId)
+            .eq('status', 'active');
 
-        if (parentAllocations.length > 0) {
-          const parentAllocIds = parentAllocations.map(a => a.id);
-          const { data: priceData } = await supabase
-            .from('sub_allocation_prices')
-            .select('*')
-            .in('allocation_id', parentAllocIds)
-            .eq('sub_org_id', userOrgId);
+          const newAllocations = (ancestorAllocData || []).filter(
+            a => !collectedProjectIds.has(a.project_id)
+          );
 
-          const priceMap = new Map<string, number>();
-          (priceData || []).forEach((p: SubAllocationPrice) => {
-            priceMap.set(p.allocation_id, Number(p.payout_per_appointment));
-          });
+          if (newAllocations.length > 0) {
+            const allocIds = newAllocations.map(a => a.id);
+            const { data: priceData } = await supabase
+              .from('sub_allocation_prices')
+              .select('*')
+              .in('allocation_id', allocIds)
+              .eq('sub_org_id', userOrgId);
 
-          const inherited: AllocationWithPrice[] = parentAllocations.map(a => ({
-            ...a,
-            // 卸単価が未設定の場合はnull（一次代理店の単価を見せない）
-            effectivePayoutPerAppointment: priceMap.has(a.id) ? priceMap.get(a.id)! : null,
-          }));
-          allAllocs = [...allAllocs, ...inherited];
+            const priceMap = new Map<string, number>();
+            (priceData || []).forEach((p: SubAllocationPrice) => {
+              priceMap.set(p.allocation_id, Number(p.payout_per_appointment));
+            });
+
+            const inherited: AllocationWithPrice[] = newAllocations.map(a => ({
+              ...a,
+              effectivePayoutPerAppointment: priceMap.has(a.id) ? priceMap.get(a.id)! : null,
+            }));
+            allAllocs = [...allAllocs, ...inherited];
+            newAllocations.forEach(a => collectedProjectIds.add(a.project_id));
+          }
         }
       }
 
