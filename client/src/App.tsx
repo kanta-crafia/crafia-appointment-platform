@@ -58,6 +58,7 @@ function AuthenticatedRoutes() {
           <Route path="/sns-accounts" component={SnsAccounts} />
           <Route path="/sub-allocation-prices" component={SubAllocationPrices} />
           <Route path="/audit-logs" component={AuditLogs} />
+          <Route path="/sub-partners" component={SubPartnerManagement} />
           <Route>
             <Redirect to="/" />
           </Route>

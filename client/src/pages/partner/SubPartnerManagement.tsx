@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { supabase, type Organization, type Appointment, type SubPartnerPayment, type Allocation, type SubAllocationPrice } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { PageHeader } from '@/components/PageHeader';
@@ -13,17 +13,62 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import {
   Building2, Users, ClipboardCheck, TrendingUp, Clock, CheckCircle2,
-  XCircle, DollarSign, Plus, Edit, Eye, EyeOff, Save, Pencil
+  XCircle, DollarSign, Plus, Edit, Eye, EyeOff, Save, Pencil, ChevronRight
 } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog as PriceDialog, DialogContent as PriceDialogContent, DialogHeader as PriceDialogHeader, DialogTitle as PriceDialogTitle, DialogFooter as PriceDialogFooter, DialogDescription as PriceDialogDescription } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 
+// Helper: build a tree of descendant orgs from a flat list
+function getDescendantOrgs(allOrgs: Organization[], rootOrgId: string): Organization[] {
+  const descendants: Organization[] = [];
+  const queue = [rootOrgId];
+  while (queue.length > 0) {
+    const parentId = queue.shift()!;
+    const children = allOrgs.filter(o => o.parent_org_id === parentId && o.id !== rootOrgId);
+    for (const child of children) {
+      if (!descendants.some(d => d.id === child.id)) {
+        descendants.push(child);
+        queue.push(child.id);
+      }
+    }
+  }
+  return descendants;
+}
+
+// Helper: compute depth of an org relative to root
+function getOrgDepth(org: Organization, allOrgs: Organization[], rootOrgId: string): number {
+  let depth = 0;
+  let current = org;
+  while (current.parent_org_id && current.parent_org_id !== rootOrgId) {
+    depth++;
+    const parent = allOrgs.find(o => o.id === current.parent_org_id);
+    if (!parent) break;
+    current = parent;
+  }
+  return depth;
+}
+
+// Helper: sort orgs in tree order (parent before children, siblings alphabetically)
+function sortOrgsTreeOrder(orgs: Organization[], rootOrgId: string): Organization[] {
+  const result: Organization[] = [];
+  const addChildren = (parentId: string) => {
+    const children = orgs
+      .filter(o => o.parent_org_id === parentId)
+      .sort((a, b) => a.name.localeCompare(b.name));
+    for (const child of children) {
+      result.push(child);
+      addChildren(child.id);
+    }
+  };
+  addChildren(rootOrgId);
+  return result;
+}
+
 export default function SubPartnerManagement() {
-  const { user } = useAuth();
-  // Stabilize dependency
+  const { user, isAdmin } = useAuth();
   const userOrgId = user?.org_id;
+  const [allOrgs, setAllOrgs] = useState<Organization[]>([]);
   const [subOrgs, setSubOrgs] = useState<Organization[]>([]);
   const [subUsers, setSubUsers] = useState<Record<string, { login_id: string; full_name: string | null; plain_password: string | null }[]>>({});
   const [subAppointments, setSubAppointments] = useState<Appointment[]>([]);
@@ -65,23 +110,27 @@ export default function SubPartnerManagement() {
     if (!userOrgId) return;
     setLoading(true);
     try {
-      // Get sub organizations (children of current org)
-      const { data: orgs } = await supabase
+      // Get ALL organizations visible via RLS (includes descendants + ancestors)
+      const { data: orgsData } = await supabase
         .from('organizations')
         .select('*')
-        .eq('parent_org_id', userOrgId)
         .eq('status', 'active');
-      const subOrgList = orgs || [];
-      setSubOrgs(subOrgList);
+      const allOrgList = orgsData || [];
+      setAllOrgs(allOrgList);
 
-      if (subOrgList.length === 0) {
+      // Build descendant list (excludes self and ancestors)
+      const descendants = getDescendantOrgs(allOrgList, userOrgId);
+      const sortedDescendants = sortOrgsTreeOrder(descendants, userOrgId);
+      setSubOrgs(sortedDescendants);
+
+      if (sortedDescendants.length === 0) {
         setLoading(false);
         return;
       }
 
-      const subOrgIds = subOrgList.map(o => o.id);
+      const subOrgIds = sortedDescendants.map(o => o.id);
 
-      // Get users for each sub org
+      // Get users for each descendant org
       const { data: usersData } = await supabase
         .from('users')
         .select('org_id, login_id, full_name, plain_password')
@@ -95,7 +144,7 @@ export default function SubPartnerManagement() {
       });
       setSubUsers(usersByOrg);
 
-      // Get appointments from sub orgs
+      // Get appointments from ALL descendant orgs
       const { data: appts } = await supabase
         .from('appointments')
         .select('*, project:projects(title, project_number)')
@@ -103,7 +152,7 @@ export default function SubPartnerManagement() {
         .order('created_at', { ascending: false });
       setSubAppointments(appts || []);
 
-      // Get payments
+      // Get payments (direct children only for payment management)
       const { data: payData } = await supabase
         .from('sub_partner_payments')
         .select('*, sub_org:organizations!sub_partner_payments_sub_org_id_fkey(name)')
@@ -118,7 +167,7 @@ export default function SubPartnerManagement() {
         .eq('child_org_id', userOrgId);
       setParentAllocations(allocData || []);
 
-      // Get sub allocation prices for sub orgs
+      // Get sub allocation prices for descendant orgs
       const { data: priceData } = await supabase
         .from('sub_allocation_prices')
         .select('*')
@@ -134,9 +183,12 @@ export default function SubPartnerManagement() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Stats per sub org
+  // Stats per sub org (including its own descendants)
   const getSubOrgStats = (orgId: string) => {
-    const appts = subAppointments.filter(a => a.org_id === orgId);
+    // Get this org + its descendants
+    const thisOrgDescendants = getDescendantOrgs(allOrgs, orgId);
+    const relevantOrgIds = [orgId, ...thisOrgDescendants.map(o => o.id)];
+    const appts = subAppointments.filter(a => relevantOrgIds.includes(a.org_id));
     return {
       total: appts.length,
       approved: appts.filter(a => a.status === 'approved').length,
@@ -154,10 +206,12 @@ export default function SubPartnerManagement() {
   };
 
   // Payment handlers
+  const directChildren = subOrgs.filter(o => o.parent_org_id === userOrgId);
+
   const openNewPayment = () => {
     setEditingPayment(null);
     setPaymentForm({
-      sub_org_id: subOrgs[0]?.id || '',
+      sub_org_id: directChildren[0]?.id || '',
       period: format(new Date(), 'yyyy-MM'),
       unit_price: 0,
       paid_amount: 0,
@@ -183,7 +237,6 @@ export default function SubPartnerManagement() {
   const handleSavePayment = async () => {
     if (!user || !paymentForm.sub_org_id) return;
 
-    // Calculate counts for the period
     const periodAppts = subAppointments.filter(a => {
       const apptMonth = a.created_at?.substring(0, 7);
       return a.org_id === paymentForm.sub_org_id && apptMonth === paymentForm.period;
@@ -200,11 +253,9 @@ export default function SubPartnerManagement() {
       approved_count: approvedCount,
       unit_price: paymentForm.unit_price,
       total_amount: totalAmount,
-      status: paymentForm.status,
       paid_amount: paymentForm.status === 'paid' ? totalAmount : paymentForm.paid_amount,
-      paid_at: paymentForm.status === 'paid' ? new Date().toISOString() : null,
+      status: paymentForm.status,
       notes: paymentForm.notes || null,
-      updated_at: new Date().toISOString(),
     };
 
     try {
@@ -316,6 +367,21 @@ export default function SubPartnerManagement() {
     }
   };
 
+  // Helper: get org display name with tree indent
+  const getOrgDisplayName = (org: Organization) => {
+    const depth = getOrgDepth(org, allOrgs, userOrgId!);
+    const indent = depth > 0 ? '└ '.repeat(1) : '';
+    const prefix = '　'.repeat(depth);
+    return `${prefix}${indent}${org.name}`;
+  };
+
+  // Helper: get tier label
+  const getTierLabel = (org: Organization): string => {
+    const depth = getOrgDepth(org, allOrgs, userOrgId!);
+    if (org.parent_org_id === userOrgId) return '直下';
+    return `${depth + 1}階層下`;
+  };
+
   if (loading) {
     return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>;
   }
@@ -323,11 +389,11 @@ export default function SubPartnerManagement() {
   if (subOrgs.length === 0) {
     return (
       <div>
-        <PageHeader title="二次代理店管理" description="二次代理店のアポ状況と支払いを管理" />
+        <PageHeader title="代理店管理" description="傘下代理店のアポ状況と支払いを管理" />
         <Card className="border shadow-sm">
           <CardContent className="py-12 text-center">
             <Building2 className="w-12 h-12 text-muted-foreground/40 mx-auto mb-3" />
-            <p className="text-muted-foreground">二次代理店はまだ登録されていません</p>
+            <p className="text-muted-foreground">傘下代理店はまだ登録されていません</p>
           </CardContent>
         </Card>
       </div>
@@ -336,7 +402,7 @@ export default function SubPartnerManagement() {
 
   return (
     <div>
-      <PageHeader title="二次代理店管理" description="二次代理店のアポ状況と支払いを管理" />
+      <PageHeader title="代理店管理" description="傘下代理店のアポ状況と支払いを管理" />
 
       {/* Summary cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -344,7 +410,7 @@ export default function SubPartnerManagement() {
           <CardContent className="p-5">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground font-medium">二次代理店数</p>
+                <p className="text-sm text-muted-foreground font-medium">傘下代理店数</p>
                 <p className="text-3xl font-bold mt-1">{subOrgs.length}</p>
               </div>
               <div className="w-11 h-11 rounded-lg flex items-center justify-center text-blue-600 bg-blue-50">
@@ -408,15 +474,31 @@ export default function SubPartnerManagement() {
             {subOrgs.map(org => {
               const stats = getSubOrgStats(org.id);
               const users = subUsers[org.id] || [];
+              const depth = getOrgDepth(org, allOrgs, userOrgId!);
+              const isDirectChild = org.parent_org_id === userOrgId;
+              const parentOrg = allOrgs.find(o => o.id === org.parent_org_id);
+
               return (
-                <Card key={org.id} className="border shadow-sm">
+                <Card key={org.id} className={`border shadow-sm ${depth > 0 ? 'ml-' + Math.min(depth * 4, 16) : ''}`}
+                  style={{ marginLeft: depth > 0 ? `${depth * 1.5}rem` : undefined }}>
                   <CardHeader className="pb-3">
                     <div className="flex items-center justify-between">
                       <CardTitle className="text-base font-semibold flex items-center gap-2">
+                        {depth > 0 && <ChevronRight className="w-4 h-4 text-muted-foreground" />}
                         <Building2 className="w-4 h-4 text-muted-foreground" />
                         {org.name}
+                        {!isDirectChild && parentOrg && (
+                          <span className="text-xs text-muted-foreground font-normal ml-2">
+                            (親: {parentOrg.name})
+                          </span>
+                        )}
                       </CardTitle>
-                      <Badge variant="outline" className="text-xs">{org.status === 'active' ? '有効' : '無効'}</Badge>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-xs">
+                          {getTierLabel(org)}
+                        </Badge>
+                        <Badge variant="outline" className="text-xs">{org.status === 'active' ? '有効' : '無効'}</Badge>
+                      </div>
                     </div>
                   </CardHeader>
                   <CardContent>
@@ -481,56 +563,60 @@ export default function SubPartnerManagement() {
           </div>
         </TabsContent>
 
-        {/* Prices Tab */}
+        {/* Prices Tab - only show direct children for price management */}
         <TabsContent value="prices">
           <Card className="border shadow-sm">
             <CardHeader className="pb-3">
-              <CardTitle className="text-base font-semibold">二次代理店への卸単価設定</CardTitle>
-              <p className="text-sm text-muted-foreground">自社に割り当てられた案件は二次代理店に自動継承されます。卸単価のみ個別設定できます。</p>
+              <CardTitle className="text-base font-semibold">代理店への卸単価設定</CardTitle>
+              <p className="text-sm text-muted-foreground">自社に割り当てられた案件は傘下代理店に自動継承されます。直下の代理店への卸単価を個別設定できます。</p>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>二次代理店名</TableHead>
-                    <TableHead className="text-center">継承案件数</TableHead>
-                    <TableHead className="text-center">個別単価設定</TableHead>
-                    <TableHead className="text-right">操作</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {subOrgs.map(org => {
-                    const pc = getChildPriceCount(org.id);
-                    return (
-                      <TableRow key={org.id}>
-                        <TableCell className="font-medium">{org.name}</TableCell>
-                        <TableCell className="text-center">{pc.total}件</TableCell>
-                        <TableCell className="text-center">
-                          {pc.custom > 0 ? (
-                            <Badge className="bg-blue-100 text-blue-700 border-0">{pc.custom}件設定済</Badge>
-                          ) : (
-                            <span className="text-sm text-muted-foreground">未設定（単価非表示）</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button variant="outline" size="sm" onClick={() => openPriceEdit(org)}>
-                            <Pencil className="w-3.5 h-3.5 mr-1" /> 卸単価設定
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+              {directChildren.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-8 text-center">直下の代理店がありません</p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>代理店名</TableHead>
+                      <TableHead className="text-center">継承案件数</TableHead>
+                      <TableHead className="text-center">個別単価設定</TableHead>
+                      <TableHead className="text-right">操作</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {directChildren.map(org => {
+                      const pc = getChildPriceCount(org.id);
+                      return (
+                        <TableRow key={org.id}>
+                          <TableCell className="font-medium">{org.name}</TableCell>
+                          <TableCell className="text-center">{pc.total}件</TableCell>
+                          <TableCell className="text-center">
+                            {pc.custom > 0 ? (
+                              <Badge className="bg-blue-100 text-blue-700 border-0">{pc.custom}件設定済</Badge>
+                            ) : (
+                              <span className="text-sm text-muted-foreground">未設定（単価非表示）</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button variant="outline" size="sm" onClick={() => openPriceEdit(org)}>
+                              <Pencil className="w-3.5 h-3.5 mr-1" /> 卸単価設定
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
 
-        {/* Appointments Tab */}
+        {/* Appointments Tab - shows ALL descendant appointments */}
         <TabsContent value="appointments">
           <Card className="border shadow-sm">
             <CardHeader className="pb-3">
-              <CardTitle className="text-base font-semibold">二次代理店アポ一覧</CardTitle>
+              <CardTitle className="text-base font-semibold">傘下代理店アポ一覧</CardTitle>
             </CardHeader>
             <CardContent>
               {subAppointments.length === 0 ? (
@@ -578,16 +664,18 @@ export default function SubPartnerManagement() {
           </Card>
         </TabsContent>
 
-        {/* Payments Tab */}
+        {/* Payments Tab - direct children only */}
         <TabsContent value="payments">
           <Card className="border shadow-sm">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-base font-semibold">支払い管理</CardTitle>
-                <Button size="sm" onClick={openNewPayment}>
-                  <Plus className="w-4 h-4 mr-1" />
-                  支払い登録
-                </Button>
+                {directChildren.length > 0 && (
+                  <Button size="sm" onClick={openNewPayment}>
+                    <Plus className="w-4 h-4 mr-1" />
+                    支払い登録
+                  </Button>
+                )}
               </div>
             </CardHeader>
             <CardContent>
@@ -599,7 +687,7 @@ export default function SubPartnerManagement() {
                     <thead>
                       <tr className="border-b bg-muted/30">
                         <th className="text-left p-3 font-medium">対象期間</th>
-                        <th className="text-left p-3 font-medium">二次代理店</th>
+                        <th className="text-left p-3 font-medium">代理店</th>
                         <th className="text-right p-3 font-medium">アポ数</th>
                         <th className="text-right p-3 font-medium">承認数</th>
                         <th className="text-right p-3 font-medium">単価</th>
@@ -643,7 +731,7 @@ export default function SubPartnerManagement() {
             <DialogTitle>{editingPriceOrg?.name} — 卸単価設定</DialogTitle>
           </DialogHeader>
           <div className="py-2">
-            <p className="text-sm text-muted-foreground mb-3">各案件の卸単価を設定します。空欄の場合、二次代理店には単価が表示されません。</p>
+            <p className="text-sm text-muted-foreground mb-3">各案件の卸単価を設定します。空欄の場合、代理店には単価が表示されません。</p>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -703,11 +791,11 @@ export default function SubPartnerManagement() {
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div>
-              <Label>二次代理店 *</Label>
+              <Label>代理店 *</Label>
               <Select value={paymentForm.sub_org_id} onValueChange={v => setPaymentForm(f => ({ ...f, sub_org_id: v }))}>
                 <SelectTrigger><SelectValue placeholder="選択してください" /></SelectTrigger>
                 <SelectContent>
-                  {subOrgs.map(o => (
+                  {directChildren.map(o => (
                     <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>
                   ))}
                 </SelectContent>

@@ -45,11 +45,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   }, [userId]);
 
-  // Check if current partner has sub-organizations
+  // Check if current user has any descendant organizations (works for all roles)
   useEffect(() => {
-    if (!userOrgId || isAdmin) return;
+    if (!userOrgId) return;
     const checkSubOrgs = async () => {
       try {
+        // Check for direct child organizations (parent_org_id = current org)
         const { count } = await supabase
           .from('organizations')
           .select('*', { count: 'exact', head: true })
@@ -61,7 +62,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       }
     };
     checkSubOrgs();
-  }, [userOrgId, isAdmin]);
+  }, [userOrgId]);
 
   useEffect(() => {
     fetchUnread();
@@ -80,6 +81,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { label: '二次代理店卸単価', href: '/sub-allocation-prices', icon: Users, adminOnly: true },
     { label: '通知', href: '/notifications', icon: Bell, badge: unreadCount },
     { label: '監査ログ', href: '/audit-logs', icon: FileText, adminOnly: true },
+    ...(hasSubOrgs ? [{ label: '代理店管理', href: '/sub-partners', icon: Users }] : []),
   ];
 
   const partnerNav: NavItem[] = [
@@ -87,7 +89,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { label: '割り当て案件', href: '/my-allocations', icon: Briefcase },
     { label: 'アポ登録', href: '/appointments/new', icon: ClipboardCheck },
     { label: 'アポ一覧', href: '/appointments', icon: FileText },
-    ...(hasSubOrgs ? [{ label: '二次代理店管理', href: '/sub-partners', icon: Users }] : []),
+    ...(hasSubOrgs ? [{ label: '代理店管理', href: '/sub-partners', icon: Users }] : []),
     { label: '通知', href: '/notifications', icon: Bell, badge: unreadCount },
   ];
 
