@@ -75,7 +75,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { label: '企業管理', href: '/organizations', icon: Building2, adminOnly: true },
     { label: '案件管理', href: '/projects', icon: Briefcase, adminOnly: true },
     { label: '割り当て管理', href: '/allocations', icon: GitBranch, adminOnly: true },
-    { label: 'アポ承認', href: '/approvals', icon: ClipboardCheck, adminOnly: true },
+    { label: 'アポ一覧', href: '/approvals', icon: ClipboardCheck, adminOnly: true },
     { label: '代理店別集計', href: '/agency-stats', icon: PieChart, adminOnly: true },
     { label: 'SNSアカウント', href: '/sns-accounts', icon: Share2, adminOnly: true },
     { label: '二次代理店卸単価', href: '/sub-allocation-prices', icon: Users, adminOnly: true },

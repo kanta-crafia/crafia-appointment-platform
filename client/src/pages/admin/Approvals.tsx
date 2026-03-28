@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { supabase, type Appointment } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { PageHeader } from '@/components/PageHeader';
@@ -10,9 +10,9 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { CheckCircle, XCircle, Ban, Pencil, Download } from 'lucide-react';
+import { CheckCircle, XCircle, Ban, Pencil, Download, AlertTriangle, Clock } from 'lucide-react';
 import { toast } from 'sonner';
-import { format } from 'date-fns';
+import { format, isToday, isTomorrow } from 'date-fns';
 import { Input } from '@/components/ui/input';
 
 export default function Approvals() {
@@ -246,6 +246,21 @@ export default function Approvals() {
 
   const pendingCount = appointments.filter(a => a.status === 'pending').length;
 
+  // 当日・翌日のアポ（全アポから抽出）
+  const todayAppointments = useMemo(() => {
+    return appointments.filter(a => {
+      const meetingDate = new Date(a.meeting_datetime);
+      return isToday(meetingDate) && a.status !== 'cancelled' && a.status !== 'rejected';
+    }).sort((a, b) => new Date(a.meeting_datetime).getTime() - new Date(b.meeting_datetime).getTime());
+  }, [appointments]);
+
+  const tomorrowAppointments = useMemo(() => {
+    return appointments.filter(a => {
+      const meetingDate = new Date(a.meeting_datetime);
+      return isTomorrow(meetingDate) && a.status !== 'cancelled' && a.status !== 'rejected';
+    }).sort((a, b) => new Date(a.meeting_datetime).getTime() - new Date(b.meeting_datetime).getTime());
+  }, [appointments]);
+
   if (loading) {
     return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>;
   }
@@ -253,12 +268,101 @@ export default function Approvals() {
   return (
     <div>
       <div className="flex items-center justify-between">
-        <PageHeader title="アポイント承認" description="アポイントの確認・承認・却下・取消" />
+        <PageHeader title="アポ一覧" description="アポイントの確認・承認・却下・取消" />
         <Button variant="outline" size="sm" className="gap-1.5" onClick={handleCsvDownload} disabled={filtered.length === 0}>
           <Download className="w-4 h-4" />
           CSVダウンロード
         </Button>
       </div>
+
+      {/* 当日・翌日アポリマインド */}
+      {(todayAppointments.length > 0 || tomorrowAppointments.length > 0) && (
+        <div className="mb-4 space-y-3">
+          {/* 当日のアポ */}
+          {todayAppointments.length > 0 && (
+            <div className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-950/20 dark:border-red-900/30 p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <AlertTriangle className="w-4 h-4 text-red-600 dark:text-red-400" />
+                <h3 className="text-sm font-semibold text-red-700 dark:text-red-400">
+                  本日のアポイント ({todayAppointments.length}件)
+                </h3>
+              </div>
+              <div className="space-y-1.5">
+                {todayAppointments.map(a => (
+                  <div
+                    key={`today-${a.id}`}
+                    className="flex items-center gap-3 px-3 py-2 rounded-md bg-white/70 dark:bg-red-950/30 cursor-pointer hover:bg-white dark:hover:bg-red-950/50 transition-colors"
+                    onClick={() => openDetail(a)}
+                  >
+                    <span className="text-sm font-bold text-red-700 dark:text-red-400 min-w-[52px]">
+                      {format(new Date(a.meeting_datetime), 'HH:mm')}
+                    </span>
+                    <span className="text-sm font-medium text-red-900 dark:text-red-300">
+                      {(a as any).project?.project_number ? `[${(a as any).project.project_number}] ` : ''}{(a as any).project?.title || '—'}
+                    </span>
+                    <span className="text-sm text-red-800 dark:text-red-300/80">
+                      {a.target_company_name}
+                    </span>
+                    <span className="text-xs text-red-600 dark:text-red-400/70">
+                      {(a as any).organization?.name || ''}
+                    </span>
+                    {a.contact_person && (
+                      <span className="text-xs text-red-600 dark:text-red-400/70">
+                        ({a.contact_person})
+                      </span>
+                    )}
+                    <span className="ml-auto">
+                      <StatusBadge status={a.status} />
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 翌日のアポ */}
+          {tomorrowAppointments.length > 0 && (
+            <div className="rounded-lg border border-yellow-200 bg-yellow-50 dark:bg-yellow-950/20 dark:border-yellow-900/30 p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <Clock className="w-4 h-4 text-yellow-600 dark:text-yellow-400" />
+                <h3 className="text-sm font-semibold text-yellow-700 dark:text-yellow-400">
+                  明日のアポイント ({tomorrowAppointments.length}件)
+                </h3>
+              </div>
+              <div className="space-y-1.5">
+                {tomorrowAppointments.map(a => (
+                  <div
+                    key={`tomorrow-${a.id}`}
+                    className="flex items-center gap-3 px-3 py-2 rounded-md bg-white/70 dark:bg-yellow-950/30 cursor-pointer hover:bg-white dark:hover:bg-yellow-950/50 transition-colors"
+                    onClick={() => openDetail(a)}
+                  >
+                    <span className="text-sm font-bold text-yellow-700 dark:text-yellow-400 min-w-[52px]">
+                      {format(new Date(a.meeting_datetime), 'HH:mm')}
+                    </span>
+                    <span className="text-sm font-medium text-yellow-900 dark:text-yellow-300">
+                      {(a as any).project?.project_number ? `[${(a as any).project.project_number}] ` : ''}{(a as any).project?.title || '—'}
+                    </span>
+                    <span className="text-sm text-yellow-800 dark:text-yellow-300/80">
+                      {a.target_company_name}
+                    </span>
+                    <span className="text-xs text-yellow-600 dark:text-yellow-400/70">
+                      {(a as any).organization?.name || ''}
+                    </span>
+                    {a.contact_person && (
+                      <span className="text-xs text-yellow-600 dark:text-yellow-400/70">
+                        ({a.contact_person})
+                      </span>
+                    )}
+                    <span className="ml-auto">
+                      <StatusBadge status={a.status} />
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
