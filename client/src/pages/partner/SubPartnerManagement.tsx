@@ -100,7 +100,7 @@ export default function SubPartnerManagement() {
     allocationId: string;
     projectTitle: string;
     projectNumber: string;
-    parentPayout: number;
+    parentPayout: number | null;
     subPrice: number | null;
     subPriceId: string | null;
   }>>([]);
@@ -160,12 +160,72 @@ export default function SubPartnerManagement() {
         .order('period', { ascending: false });
       setPayments(payData || []);
 
-      // Get parent allocations (allocations where child_org_id = current org)
-      const { data: allocData } = await supabase
+      // Get ALL allocations visible to this org (direct + inherited from ancestors)
+      // 1. Direct allocations
+      const { data: directAllocData } = await supabase
         .from('allocations')
         .select('*, project:projects(title, project_number, status)')
         .eq('child_org_id', userOrgId);
-      setParentAllocations(allocData || []);
+      const directAllocs = directAllocData || [];
+
+      // 2. Inherited allocations from ancestor chain
+      const myOrg = allOrgList.find(o => o.id === userOrgId);
+      let allVisibleAllocs: (Allocation & { _effectivePayout?: number | null })[] = [...directAllocs];
+      const collectedProjectIds = new Set(directAllocs.map(a => a.project_id));
+
+      if (myOrg?.parent_org_id) {
+        // Build ancestor chain (up to Crafia HQ)
+        const ancestorOrgIds: string[] = [];
+        let currentParentId: string | null = myOrg.parent_org_id;
+        const maxDepth = 10;
+        let depthCounter = 0;
+        while (currentParentId && depthCounter < maxDepth) {
+          const ancestorOrg = allOrgList.find(o => o.id === currentParentId);
+          if (!ancestorOrg) break;
+          // Skip Crafia HQ (parent_org_id is null)
+          if (ancestorOrg.parent_org_id) {
+            ancestorOrgIds.push(ancestorOrg.id);
+          }
+          currentParentId = ancestorOrg.parent_org_id;
+          depthCounter++;
+        }
+
+        // Fetch ancestor allocations and inherit (closest first)
+        for (const ancestorId of ancestorOrgIds) {
+          const { data: ancestorAllocData } = await supabase
+            .from('allocations')
+            .select('*, project:projects(title, project_number, status)')
+            .eq('child_org_id', ancestorId);
+
+          const newAllocations = (ancestorAllocData || []).filter(
+            a => !collectedProjectIds.has(a.project_id)
+          );
+
+          if (newAllocations.length > 0) {
+            // Get my org's sub_allocation_prices for these allocations
+            const allocIds = newAllocations.map(a => a.id);
+            const { data: myPriceData } = await supabase
+              .from('sub_allocation_prices')
+              .select('*')
+              .in('allocation_id', allocIds)
+              .eq('sub_org_id', userOrgId);
+
+            const myPriceMap = new Map<string, number>();
+            (myPriceData || []).forEach((p: SubAllocationPrice) => {
+              myPriceMap.set(p.allocation_id, Number(p.payout_per_appointment));
+            });
+
+            const inherited = newAllocations.map(a => ({
+              ...a,
+              _effectivePayout: myPriceMap.has(a.id) ? myPriceMap.get(a.id)! : null,
+            }));
+            allVisibleAllocs = [...allVisibleAllocs, ...inherited];
+            newAllocations.forEach(a => collectedProjectIds.add(a.project_id));
+          }
+        }
+      }
+
+      setParentAllocations(allVisibleAllocs);
 
       // Get sub allocation prices for descendant orgs
       const { data: priceData } = await supabase
@@ -286,11 +346,17 @@ export default function SubPartnerManagement() {
     const entries = activeAllocs.map(a => {
       const proj = (a as any).project;
       const existing = subPrices.find(p => p.allocation_id === a.id && p.sub_org_id === childOrg.id);
+      // For inherited allocations, use _effectivePayout (my org's price) as the parent payout
+      // For direct allocations, use payout_per_appointment
+      const isInherited = a.child_org_id !== userOrgId;
+      const myPayout = isInherited
+        ? (a as any)._effectivePayout ?? null
+        : Number(a.payout_per_appointment);
       return {
         allocationId: a.id,
         projectTitle: proj?.title || '—',
         projectNumber: proj?.project_number || '',
-        parentPayout: Number(a.payout_per_appointment),
+        parentPayout: myPayout,
         subPrice: existing ? Number(existing.payout_per_appointment) : null,
         subPriceId: existing?.id || null,
       };
@@ -747,7 +813,7 @@ export default function SubPartnerManagement() {
                       {entry.projectNumber ? `[${entry.projectNumber}] ` : ''}{entry.projectTitle}
                     </TableCell>
                     <TableCell className="text-right font-mono text-muted-foreground">
-                      ¥{entry.parentPayout.toLocaleString()}
+                      {entry.parentPayout !== null ? `¥${entry.parentPayout.toLocaleString()}` : <span className="text-xs">未設定</span>}
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">
@@ -756,7 +822,7 @@ export default function SubPartnerManagement() {
                           type="number"
                           min={0}
                           className="w-36 text-right"
-                          placeholder={`${entry.parentPayout}`}
+                          placeholder={entry.parentPayout !== null ? `${entry.parentPayout}` : '単価を入力'}
                           value={entry.subPrice ?? ''}
                           onChange={(e) => handlePriceEntryChange(i, e.target.value)}
                         />
