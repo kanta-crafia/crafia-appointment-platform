@@ -78,7 +78,9 @@ export default function SnsAccounts() {
   // Assign form
   const [assignOrgId, setAssignOrgId] = useState('');
   const [assignAllocationId, setAssignAllocationId] = useState('');
+  const [assignStaffName, setAssignStaffName] = useState('');
   const [assignNotes, setAssignNotes] = useState('');
+  const [adminOrgId, setAdminOrgId] = useState<string | null>(null);
 
   // Password visibility
   const [visiblePasswords, setVisiblePasswords] = useState<Set<string>>(new Set());
@@ -124,8 +126,14 @@ export default function SnsAccounts() {
         .order('name');
       setAllOrgs(orgsData || []);
 
-      // Get first-tier orgs (parent_org_id is null or is Crafia)
-      const firstTier = (orgsData || []).filter(o => !o.parent_org_id || o.tier === 1);
+      // Find Crafia本部 (the org with no parent)
+      const adminOrg = (orgsData || []).find(o => !o.parent_org_id);
+      if (adminOrg) setAdminOrgId(adminOrg.id);
+
+      // Get first-tier orgs (direct children of Crafia本部) + Crafia本部自身
+      const firstTier = adminOrg
+        ? (orgsData || []).filter(o => o.parent_org_id === adminOrg.id || o.id === adminOrg.id)
+        : (orgsData || []);
       setFirstTierOrgs(firstTier);
 
       // Get all allocations
@@ -356,11 +364,12 @@ export default function SnsAccounts() {
     }
   };
 
-  // === Assign to 1st tier org ===
+  // === Assign to org/staff ===
   const openAssign = (account: SnsAccount) => {
     setAssignAccount(account);
     setAssignOrgId('');
     setAssignAllocationId('');
+    setAssignStaffName('');
     setAssignNotes('');
     setShowAssignDialog(true);
   };
@@ -372,18 +381,12 @@ export default function SnsAccounts() {
     }
     setSaving(true);
     try {
-      // Get admin org id (Crafia本部)
-      const { data: adminOrg } = await supabase
-        .from('organizations')
-        .select('id')
-        .is('parent_org_id', null)
-        .single();
-
       const { error } = await supabase.from('sns_account_assignments').insert({
         sns_account_id: assignAccount.id,
         assigned_org_id: assignOrgId,
         allocation_id: assignAllocationId && assignAllocationId !== 'none' ? assignAllocationId : null,
-        assigned_by_org_id: adminOrg?.id || assignOrgId,
+        assigned_by_org_id: adminOrgId || assignOrgId,
+        assigned_staff_name: assignStaffName && assignStaffName !== 'none' ? assignStaffName : null,
         notes: assignNotes || null,
       });
       if (error) throw error;
@@ -436,6 +439,12 @@ export default function SnsAccounts() {
     if (!formAssignedOrgId) return allSalesStaff;
     return allSalesStaff.filter(s => s.org_id === formAssignedOrgId);
   }, [formAssignedOrgId, allSalesStaff]);
+
+  // Sales staff filtered by assign dialog org selection
+  const staffForAssignOrg = useMemo(() => {
+    if (!assignOrgId) return [];
+    return allSalesStaff.filter(s => s.org_id === assignOrgId);
+  }, [assignOrgId, allSalesStaff]);
 
   // Stats
   const totalCount = accounts.length;
@@ -1042,27 +1051,62 @@ export default function SnsAccounts() {
 
       {/* === Assign Dialog === */}
       <Dialog open={showAssignDialog} onOpenChange={setShowAssignDialog}>
-        <DialogContent className="sm:max-w-[480px]">
+        <DialogContent className="sm:max-w-[520px]">
           <DialogHeader>
-            <DialogTitle>1次代理店に割り振り</DialogTitle>
+            <DialogTitle>アカウントを割り振り</DialogTitle>
             <DialogDescription>
-              「{assignAccount?.account_name}」を1次代理店に割り振ります
+              「{assignAccount?.account_name}」を企業・担当者に割り振ります
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2">
               <Label>割り振り先企業 <span className="text-destructive">*</span></Label>
-              <Select value={assignOrgId} onValueChange={setAssignOrgId}>
+              <Select value={assignOrgId} onValueChange={(v) => {
+                setAssignOrgId(v);
+                setAssignStaffName('');
+              }}>
                 <SelectTrigger>
-                  <SelectValue placeholder="1次代理店を選択" />
+                  <SelectValue placeholder="企業を選択" />
                 </SelectTrigger>
                 <SelectContent>
                   {firstTierOrgs.map(org => (
-                    <SelectItem key={org.id} value={org.id}>{org.name}</SelectItem>
+                    <SelectItem key={org.id} value={org.id}>
+                      {org.name}{!org.parent_org_id ? '（自社）' : ''}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
+            {assignOrgId && staffForAssignOrg.length > 0 && (
+              <div className="space-y-2">
+                <Label>営業担当者（任意）</Label>
+                <Select value={assignStaffName || 'none'} onValueChange={(v) => setAssignStaffName(v === 'none' ? '' : v)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="担当者を選択（任意）" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">指定なし</SelectItem>
+                    {staffForAssignOrg.map(staff => (
+                      <SelectItem key={staff.id} value={staff.name}>
+                        {staff.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">選択した企業の営業担当者から選べます</p>
+              </div>
+            )}
+            {assignOrgId && staffForAssignOrg.length === 0 && (
+              <div className="space-y-2">
+                <Label>営業担当者（任意）</Label>
+                <Input
+                  placeholder="担当者名を入力（任意）"
+                  value={assignStaffName}
+                  onChange={(e) => setAssignStaffName(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">この企業には営業担当者が登録されていません。手動で入力できます。</p>
+              </div>
+            )}
             <div className="space-y-2">
               <Label>案件（任意）</Label>
               <Select value={assignAllocationId} onValueChange={setAssignAllocationId}>
@@ -1091,7 +1135,7 @@ export default function SnsAccounts() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowAssignDialog(false)}>キャンセル</Button>
-            <Button onClick={handleAssign} disabled={saving}>
+            <Button onClick={handleAssign} disabled={saving || !assignOrgId}>
               {saving ? '割り振り中...' : '割り振り'}
             </Button>
           </DialogFooter>
