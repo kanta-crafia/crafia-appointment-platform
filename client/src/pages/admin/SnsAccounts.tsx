@@ -66,8 +66,14 @@ export default function SnsAccounts() {
   const [formAccountName, setFormAccountName] = useState('');
   const [formLoginPassword, setFormLoginPassword] = useState('');
   const [formAssignedCompanyName, setFormAssignedCompanyName] = useState('');
+  const [formAssignedOrgId, setFormAssignedOrgId] = useState('');
+  const [formAssignedStaffId, setFormAssignedStaffId] = useState('');
+  const [formChatPassword, setFormChatPassword] = useState('');
   const [formNotes, setFormNotes] = useState('');
   const [formStatus, setFormStatus] = useState<string>('available');
+
+  // Sales staff for assignment
+  const [allSalesStaff, setAllSalesStaff] = useState<{id: string; org_id: string; name: string}[]>([]);
 
   // Assign form
   const [assignOrgId, setAssignOrgId] = useState('');
@@ -129,6 +135,14 @@ export default function SnsAccounts() {
         .eq('status', 'active')
         .order('created_at', { ascending: false });
       setAllAllocations(allocData || []);
+
+      // Get all sales staff
+      const { data: staffData } = await supabase
+        .from('sales_staff')
+        .select('id, org_id, name')
+        .eq('status', 'active')
+        .order('name');
+      setAllSalesStaff(staffData || []);
     } catch (e) {
       console.error('Failed to fetch orgs/allocations:', e);
     }
@@ -214,6 +228,9 @@ export default function SnsAccounts() {
     setFormAccountName('');
     setFormLoginPassword('');
     setFormAssignedCompanyName('');
+    setFormAssignedOrgId('');
+    setFormAssignedStaffId('');
+    setFormChatPassword('');
     setFormNotes('');
     setFormStatus('available');
   };
@@ -231,6 +248,12 @@ export default function SnsAccounts() {
     }
     setSaving(true);
     try {
+      // Resolve company name from org selection or manual input
+      const selectedOrg = formAssignedOrgId ? allOrgs.find(o => o.id === formAssignedOrgId) : null;
+      const companyName = selectedOrg ? selectedOrg.name : (formAssignedCompanyName || null);
+      // Resolve staff name
+      const selectedStaff = formAssignedStaffId ? allSalesStaff.find(s => s.id === formAssignedStaffId) : null;
+
       const { error } = await supabase.from('sns_accounts').insert({
         platform: formPlatform,
         gmail_address: formGmailAddress || null,
@@ -238,7 +261,8 @@ export default function SnsAccounts() {
         account_name: formAccountName,
         login_id: formGmailAddress || formAccountName,
         login_password: formLoginPassword,
-        assigned_company_name: formAssignedCompanyName || null,
+        assigned_company_name: companyName,
+        chat_password: formChatPassword || null,
         notes: formNotes || null,
         status: formStatus,
       });
@@ -262,6 +286,11 @@ export default function SnsAccounts() {
     setFormAccountName(account.account_name);
     setFormLoginPassword(account.login_password);
     setFormAssignedCompanyName(account.assigned_company_name || '');
+    // Try to find matching org by name
+    const matchingOrg = allOrgs.find(o => o.name === account.assigned_company_name);
+    setFormAssignedOrgId(matchingOrg?.id || '');
+    setFormAssignedStaffId('');
+    setFormChatPassword(account.chat_password || '');
     setFormNotes(account.notes || '');
     setFormStatus(account.status);
     setShowEditDialog(true);
@@ -275,6 +304,9 @@ export default function SnsAccounts() {
     }
     setSaving(true);
     try {
+      const selectedOrg = formAssignedOrgId ? allOrgs.find(o => o.id === formAssignedOrgId) : null;
+      const companyName = selectedOrg ? selectedOrg.name : (formAssignedCompanyName || null);
+
       const { error } = await supabase.from('sns_accounts').update({
         platform: formPlatform,
         gmail_address: formGmailAddress || null,
@@ -282,7 +314,8 @@ export default function SnsAccounts() {
         account_name: formAccountName,
         login_id: formGmailAddress || formAccountName,
         login_password: formLoginPassword,
-        assigned_company_name: formAssignedCompanyName || null,
+        assigned_company_name: companyName,
+        chat_password: formChatPassword || null,
         notes: formNotes || null,
         status: formStatus,
         updated_at: new Date().toISOString(),
@@ -435,6 +468,12 @@ export default function SnsAccounts() {
     );
   }
 
+  // Sales staff filtered by selected org
+  const staffForSelectedOrg = useMemo(() => {
+    if (!formAssignedOrgId) return allSalesStaff;
+    return allSalesStaff.filter(s => s.org_id === formAssignedOrgId);
+  }, [formAssignedOrgId, allSalesStaff]);
+
   // Shared form fields component
   const AccountFormFields = ({ isEdit = false }: { isEdit?: boolean }) => (
     <div className="space-y-4 py-2">
@@ -446,7 +485,7 @@ export default function SnsAccounts() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="facebook">Facebook</SelectItem>
-            <SelectItem value="instagram">Instagram</SelectItem>
+            <SelectItem value="threads">Threads</SelectItem>
             <SelectItem value="twitter">Twitter / X</SelectItem>
             <SelectItem value="linkedin">LinkedIn</SelectItem>
             <SelectItem value="other">その他</SelectItem>
@@ -497,16 +536,59 @@ export default function SnsAccounts() {
             onChange={(e) => setFormLoginPassword(e.target.value)}
           />
         </div>
+        <div className="space-y-2">
+          <Label>チャットPW</Label>
+          <Input
+            type="text"
+            placeholder="チャット用パスワード（任意）"
+            value={formChatPassword}
+            onChange={(e) => setFormChatPassword(e.target.value)}
+          />
+        </div>
       </div>
 
       {/* 貸出先企業 */}
       <div className="space-y-2">
         <Label>貸出先企業名</Label>
-        <Input
-          placeholder="例: 株式会社〇〇"
-          value={formAssignedCompanyName}
-          onChange={(e) => setFormAssignedCompanyName(e.target.value)}
-        />
+        <Select value={formAssignedOrgId || '_none'} onValueChange={(v) => {
+          setFormAssignedOrgId(v === '_none' ? '' : v);
+          setFormAssignedStaffId('');
+          // Also update company name text
+          const org = allOrgs.find(o => o.id === v);
+          if (org) setFormAssignedCompanyName(org.name);
+          else if (v === '_none') setFormAssignedCompanyName('');
+        }}>
+          <SelectTrigger>
+            <SelectValue placeholder="企業を選択" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="_none">未選択</SelectItem>
+            {allOrgs.map(org => (
+              <SelectItem key={org.id} value={org.id}>
+                {org.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* 営業担当（任意） */}
+      <div className="space-y-2">
+        <Label>営業担当</Label>
+        <Select value={formAssignedStaffId || '_none'} onValueChange={(v) => setFormAssignedStaffId(v === '_none' ? '' : v)}>
+          <SelectTrigger>
+            <SelectValue placeholder="担当者を選択（任意）" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="_none">未選択</SelectItem>
+            {staffForSelectedOrg.map(staff => (
+              <SelectItem key={staff.id} value={staff.id}>
+                {staff.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground">子孫企業が後から設定することもできます</p>
       </div>
 
       {/* ステータス（編集時のみ） */}
@@ -653,6 +735,7 @@ export default function SnsAccounts() {
                       <TableHead>Gmail PW</TableHead>
                       <TableHead>アカウント名</TableHead>
                       <TableHead>PW</TableHead>
+                      <TableHead>チャットPW</TableHead>
                       <TableHead>貸出先企業</TableHead>
                       <TableHead>ステータス</TableHead>
                       <TableHead>備考</TableHead>
@@ -697,6 +780,9 @@ export default function SnsAccounts() {
                         <TableCell className="font-medium text-sm">{account.account_name}</TableCell>
                         <TableCell>
                           <PasswordCell value={account.login_password} id={`ap-${account.id}`} />
+                        </TableCell>
+                        <TableCell>
+                          <PasswordCell value={account.chat_password} id={`cp-${account.id}`} />
                         </TableCell>
                         <TableCell>
                           {account.assigned_company_name ? (

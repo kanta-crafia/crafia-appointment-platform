@@ -399,6 +399,7 @@ export default function PartnerSnsAccounts() {
                       <TableHead>アカウント名</TableHead>
                       <TableHead>ログインID</TableHead>
                       <TableHead>PW</TableHead>
+                      <TableHead>チャットPW</TableHead>
                       <TableHead>案件</TableHead>
                       <TableHead>担当者</TableHead>
                       {hasChildOrgs && <TableHead className="text-right">操作</TableHead>}
@@ -444,6 +445,9 @@ export default function PartnerSnsAccounts() {
                               </TableCell>
                               <TableCell rowSpan={assignments.length} className="align-top">
                                 <PasswordCell value={account.login_password} id={`pw-${account.id}`} />
+                              </TableCell>
+                              <TableCell rowSpan={assignments.length} className="align-top">
+                                <PasswordCell value={account.chat_password} id={`cp-${account.id}`} />
                               </TableCell>
                             </>
                           )}

@@ -158,6 +158,7 @@ export interface SnsAccount {
   assigned_user_id: string | null;
   assigned_company_name: string | null;
   assigned_at: string | null;
+  chat_password: string | null;
   notes: string | null;
   status: SnsAccountStatus;
   created_at: string;
