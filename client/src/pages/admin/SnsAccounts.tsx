@@ -1011,26 +1011,29 @@ export default function SnsAccounts() {
                   <SelectValue placeholder="企業を選択" />
                 </SelectTrigger>
                 <SelectContent>
-                  {firstTierOrgs.map(org => {
-                    const isAdmin = !org.parent_org_id;
-                    const depth = isAdmin ? 0 : (() => {
-                      let d = 0;
-                      let current = org;
-                      while (current.parent_org_id) {
-                        const parent = allOrgs.find(o => o.id === current.parent_org_id);
-                        if (!parent) break;
-                        d++;
-                        current = parent;
+                  {(() => {
+                    // Build hierarchical org list (same as Organizations.tsx)
+                    const topLevel = allOrgs.filter(o => !o.parent_org_id);
+                    const result: { id: string; name: string; depth: number; parentName?: string }[] = [];
+                    const addChildren = (parentId: string, depth: number) => {
+                      const children = allOrgs.filter(o => o.parent_org_id === parentId);
+                      for (const child of children) {
+                        const parent = allOrgs.find(o => o.id === parentId);
+                        result.push({ id: child.id, name: child.name, depth, parentName: parent?.name });
+                        addChildren(child.id, depth + 1);
                       }
-                      return d;
-                    })();
-                    const prefix = depth > 0 ? '\u3000'.repeat(depth) + '└ ' : '';
-                    return (
-                      <SelectItem key={org.id} value={org.id}>
-                        {prefix}{org.name}{isAdmin ? '（自社）' : ''}
+                    };
+                    for (const top of topLevel) {
+                      result.push({ id: top.id, name: top.name, depth: 0 });
+                      addChildren(top.id, 1);
+                    }
+                    return result.map(o => (
+                      <SelectItem key={o.id} value={o.id}>
+                        {'\u00A0\u00A0'.repeat(o.depth)}{o.depth > 0 ? '└ ' : ''}{o.name}
+                        {o.parentName ? ` (${o.parentName})` : '（自社）'}
                       </SelectItem>
-                    );
-                  })}
+                    ));
+                  })()}
                 </SelectContent>
               </Select>
             </div>
@@ -1072,13 +1075,26 @@ export default function SnsAccounts() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">指定なし</SelectItem>
-                  {allAllocations
-                    .filter((alloc, idx, arr) => arr.findIndex(a => a.id === alloc.id) === idx)
-                    .map(alloc => (
-                      <SelectItem key={alloc.id} value={alloc.id}>
-                        {(alloc.project as any)?.title || alloc.id}
-                      </SelectItem>
-                    ))}
+                  {(() => {
+                    // Deduplicate by project_id to show each project only once
+                    const seenProjectIds = new Set<string>();
+                    return allAllocations
+                      .filter(alloc => {
+                        const pid = alloc.project_id;
+                        if (seenProjectIds.has(pid)) return false;
+                        seenProjectIds.add(pid);
+                        return true;
+                      })
+                      .map(alloc => {
+                        const proj = alloc.project as any;
+                        const projectNumber = proj?.project_number ? `[${proj.project_number}] ` : '';
+                        return (
+                          <SelectItem key={alloc.id} value={alloc.id}>
+                            {projectNumber}{proj?.title || alloc.id}
+                          </SelectItem>
+                        );
+                      });
+                  })()}
                 </SelectContent>
               </Select>
             </div>

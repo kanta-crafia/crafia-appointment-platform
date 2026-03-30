@@ -511,7 +511,7 @@ export default function PartnerSnsAccounts() {
                           <TableCell>
                             {assignment.allocation?.project ? (
                               <Badge variant="outline" className="text-xs">
-                                {(assignment.allocation.project as any).title}
+                                {(assignment.allocation.project as any).project_number ? `[${(assignment.allocation.project as any).project_number}] ` : ''}{(assignment.allocation.project as any).title}
                               </Badge>
                             ) : (
                               <span className="text-xs text-muted-foreground">—</span>
@@ -608,7 +608,7 @@ export default function PartnerSnsAccounts() {
                             <TableCell>
                               {assignment.allocation?.project ? (
                                 <Badge variant="outline" className="text-xs">
-                                  {(assignment.allocation.project as any).title}
+                                  {(assignment.allocation.project as any).project_number ? `[${(assignment.allocation.project as any).project_number}] ` : ''}{(assignment.allocation.project as any).title}
                                 </Badge>
                               ) : (
                                 <span className="text-xs text-muted-foreground">—</span>
@@ -691,11 +691,25 @@ export default function PartnerSnsAccounts() {
                   <SelectValue placeholder="企業を選択" />
                 </SelectTrigger>
                 <SelectContent>
-                  {descendantOrgs.map(org => (
-                    <SelectItem key={org.id} value={org.id}>
-                      {org.name}
-                    </SelectItem>
-                  ))}
+                  {(() => {
+                    // Build hierarchical descendant list
+                    const result: { id: string; name: string; depth: number; parentName?: string }[] = [];
+                    const addChildren = (parentId: string, depth: number) => {
+                      const children = descendantOrgs.filter(o => o.parent_org_id === parentId);
+                      for (const child of children) {
+                        const parent = descendantOrgs.find(o => o.id === parentId) || (parentId === userOrgId ? { name: '自社' } : null);
+                        result.push({ id: child.id, name: child.name, depth, parentName: parent?.name });
+                        addChildren(child.id, depth + 1);
+                      }
+                    };
+                    addChildren(userOrgId!, 0);
+                    return result.map(o => (
+                      <SelectItem key={o.id} value={o.id}>
+                        {'\u00A0\u00A0'.repeat(o.depth)}{o.depth > 0 ? '└ ' : ''}{o.name}
+                        {o.parentName ? ` (${o.parentName})` : ''}
+                      </SelectItem>
+                    ));
+                  })()}
                 </SelectContent>
               </Select>
             </div>
@@ -734,11 +748,25 @@ export default function PartnerSnsAccounts() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">指定なし</SelectItem>
-                  {allocations.map(alloc => (
-                    <SelectItem key={alloc.id} value={alloc.id}>
-                      {(alloc.project as any)?.title || alloc.id}
-                    </SelectItem>
-                  ))}
+                  {(() => {
+                    const seenProjectIds = new Set<string>();
+                    return allocations
+                      .filter(alloc => {
+                        const pid = alloc.project_id;
+                        if (seenProjectIds.has(pid)) return false;
+                        seenProjectIds.add(pid);
+                        return true;
+                      })
+                      .map(alloc => {
+                        const proj = alloc.project as any;
+                        const projectNumber = proj?.project_number ? `[${proj.project_number}] ` : '';
+                        return (
+                          <SelectItem key={alloc.id} value={alloc.id}>
+                            {projectNumber}{proj?.title || alloc.id}
+                          </SelectItem>
+                        );
+                      });
+                  })()}
                 </SelectContent>
               </Select>
             </div>
@@ -781,9 +809,24 @@ export default function PartnerSnsAccounts() {
                   <SelectValue placeholder="企業を選択" />
                 </SelectTrigger>
                 <SelectContent>
-                  {descendantOrgs.map(org => (
-                    <SelectItem key={org.id} value={org.id}>{org.name}</SelectItem>
-                  ))}
+                  {(() => {
+                    const result: { id: string; name: string; depth: number; parentName?: string }[] = [];
+                    const addChildren = (parentId: string, depth: number) => {
+                      const children = descendantOrgs.filter(o => o.parent_org_id === parentId);
+                      for (const child of children) {
+                        const parent = descendantOrgs.find(o => o.id === parentId) || (parentId === userOrgId ? { name: '自社' } : null);
+                        result.push({ id: child.id, name: child.name, depth, parentName: parent?.name });
+                        addChildren(child.id, depth + 1);
+                      }
+                    };
+                    addChildren(userOrgId!, 0);
+                    return result.map(o => (
+                      <SelectItem key={o.id} value={o.id}>
+                        {'\u00A0\u00A0'.repeat(o.depth)}{o.depth > 0 ? '└ ' : ''}{o.name}
+                        {o.parentName ? ` (${o.parentName})` : ''}
+                      </SelectItem>
+                    ));
+                  })()}
                 </SelectContent>
               </Select>
             </div>
@@ -822,11 +865,25 @@ export default function PartnerSnsAccounts() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">指定なし</SelectItem>
-                  {allocations.map(alloc => (
-                    <SelectItem key={alloc.id} value={alloc.id}>
-                      {(alloc.project as any)?.title || alloc.id}
-                    </SelectItem>
-                  ))}
+                  {(() => {
+                    const seenProjectIds = new Set<string>();
+                    return allocations
+                      .filter(alloc => {
+                        const pid = alloc.project_id;
+                        if (seenProjectIds.has(pid)) return false;
+                        seenProjectIds.add(pid);
+                        return true;
+                      })
+                      .map(alloc => {
+                        const proj = alloc.project as any;
+                        const projectNumber = proj?.project_number ? `[${proj.project_number}] ` : '';
+                        return (
+                          <SelectItem key={alloc.id} value={alloc.id}>
+                            {projectNumber}{proj?.title || alloc.id}
+                          </SelectItem>
+                        );
+                      });
+                  })()}
                 </SelectContent>
               </Select>
             </div>
