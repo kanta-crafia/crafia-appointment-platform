@@ -9,7 +9,7 @@ const statusConfig: Record<string, { label: string; className: string }> = {
   inactive: { label: '無効', className: 'bg-gray-100 text-gray-600 border-gray-200' },
   closed: { label: '終了', className: 'bg-slate-100 text-slate-700 border-slate-200' },
   available: { label: '空き', className: 'bg-blue-100 text-blue-800 border-blue-200' },
-  assigned: { label: '貸出中', className: 'bg-purple-100 text-purple-800 border-purple-200' },
+  assigned: { label: '割り振り済', className: 'bg-purple-100 text-purple-800 border-purple-200' },
   suspended: { label: '停止中', className: 'bg-orange-100 text-orange-800 border-orange-200' },
 };
 

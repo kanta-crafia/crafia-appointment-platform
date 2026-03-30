@@ -65,9 +65,7 @@ export default function SnsAccounts() {
   const [formGmailPassword, setFormGmailPassword] = useState('');
   const [formAccountName, setFormAccountName] = useState('');
   const [formLoginPassword, setFormLoginPassword] = useState('');
-  const [formAssignedCompanyName, setFormAssignedCompanyName] = useState('');
-  const [formAssignedOrgId, setFormAssignedOrgId] = useState('');
-  const [formAssignedStaffId, setFormAssignedStaffId] = useState('');
+
   const [formChatPassword, setFormChatPassword] = useState('');
   const [formNotes, setFormNotes] = useState('');
   const [formStatus, setFormStatus] = useState<string>('available');
@@ -235,9 +233,7 @@ export default function SnsAccounts() {
     setFormGmailPassword('');
     setFormAccountName('');
     setFormLoginPassword('');
-    setFormAssignedCompanyName('');
-    setFormAssignedOrgId('');
-    setFormAssignedStaffId('');
+
     setFormChatPassword('');
     setFormNotes('');
     setFormStatus('available');
@@ -256,12 +252,6 @@ export default function SnsAccounts() {
     }
     setSaving(true);
     try {
-      // Resolve company name from org selection or manual input
-      const selectedOrg = formAssignedOrgId ? allOrgs.find(o => o.id === formAssignedOrgId) : null;
-      const companyName = selectedOrg ? selectedOrg.name : (formAssignedCompanyName || null);
-      // Resolve staff name
-      const selectedStaff = formAssignedStaffId ? allSalesStaff.find(s => s.id === formAssignedStaffId) : null;
-
       const { error } = await supabase.from('sns_accounts').insert({
         platform: formPlatform,
         gmail_address: formGmailAddress || null,
@@ -269,7 +259,6 @@ export default function SnsAccounts() {
         account_name: formAccountName,
         login_id: formGmailAddress || formAccountName,
         login_password: formLoginPassword,
-        assigned_company_name: companyName,
         chat_password: formChatPassword || null,
         notes: formNotes || null,
         status: formStatus,
@@ -293,11 +282,7 @@ export default function SnsAccounts() {
     setFormGmailPassword(account.gmail_password || '');
     setFormAccountName(account.account_name);
     setFormLoginPassword(account.login_password);
-    setFormAssignedCompanyName(account.assigned_company_name || '');
-    // Try to find matching org by name
-    const matchingOrg = allOrgs.find(o => o.name === account.assigned_company_name);
-    setFormAssignedOrgId(matchingOrg?.id || '');
-    setFormAssignedStaffId('');
+
     setFormChatPassword(account.chat_password || '');
     setFormNotes(account.notes || '');
     setFormStatus(account.status);
@@ -312,9 +297,6 @@ export default function SnsAccounts() {
     }
     setSaving(true);
     try {
-      const selectedOrg = formAssignedOrgId ? allOrgs.find(o => o.id === formAssignedOrgId) : null;
-      const companyName = selectedOrg ? selectedOrg.name : (formAssignedCompanyName || null);
-
       const { error } = await supabase.from('sns_accounts').update({
         platform: formPlatform,
         gmail_address: formGmailAddress || null,
@@ -322,7 +304,6 @@ export default function SnsAccounts() {
         account_name: formAccountName,
         login_id: formGmailAddress || formAccountName,
         login_password: formLoginPassword,
-        assigned_company_name: companyName,
         chat_password: formChatPassword || null,
         notes: formNotes || null,
         status: formStatus,
@@ -418,7 +399,6 @@ export default function SnsAccounts() {
     const matchesSearch = searchQuery === '' ||
       account.account_name.toLowerCase().includes(q) ||
       (account.gmail_address || '').toLowerCase().includes(q) ||
-      (account.assigned_company_name || '').toLowerCase().includes(q) ||
       account.platform.toLowerCase().includes(q);
     const matchesStatus = statusFilter === 'all' || account.status === statusFilter;
     return matchesSearch && matchesStatus;
@@ -433,12 +413,6 @@ export default function SnsAccounts() {
     const matchesOrg = assignOrgFilter === 'all' || a.assigned_org_id === assignOrgFilter;
     return matchesSearch && matchesOrg;
   });
-
-  // Sales staff filtered by selected org (must be before any early return to satisfy React hooks rules)
-  const staffForSelectedOrg = useMemo(() => {
-    if (!formAssignedOrgId) return allSalesStaff;
-    return allSalesStaff.filter(s => s.org_id === formAssignedOrgId);
-  }, [formAssignedOrgId, allSalesStaff]);
 
   // Sales staff filtered by assign dialog org selection
   const staffForAssignOrg = useMemo(() => {
@@ -556,50 +530,6 @@ export default function SnsAccounts() {
         </div>
       </div>
 
-      {/* 貸出先企業 */}
-      <div className="space-y-2">
-        <Label>貸出先企業名</Label>
-        <Select value={formAssignedOrgId || '_none'} onValueChange={(v) => {
-          setFormAssignedOrgId(v === '_none' ? '' : v);
-          setFormAssignedStaffId('');
-          // Also update company name text
-          const org = allOrgs.find(o => o.id === v);
-          if (org) setFormAssignedCompanyName(org.name);
-          else if (v === '_none') setFormAssignedCompanyName('');
-        }}>
-          <SelectTrigger>
-            <SelectValue placeholder="企業を選択" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="_none">未選択</SelectItem>
-            {allOrgs.map(org => (
-              <SelectItem key={org.id} value={org.id}>
-                {org.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* 営業担当（任意） */}
-      <div className="space-y-2">
-        <Label>営業担当</Label>
-        <Select value={formAssignedStaffId || '_none'} onValueChange={(v) => setFormAssignedStaffId(v === '_none' ? '' : v)}>
-          <SelectTrigger>
-            <SelectValue placeholder="担当者を選択（任意）" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="_none">未選択</SelectItem>
-            {staffForSelectedOrg.map(staff => (
-              <SelectItem key={staff.id} value={staff.id}>
-                {staff.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <p className="text-xs text-muted-foreground">子孫企業が後から設定することもできます</p>
-      </div>
-
       {/* ステータス（編集時のみ） */}
       {isEdit && (
         <div className="space-y-2">
@@ -610,7 +540,7 @@ export default function SnsAccounts() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="available">空き</SelectItem>
-              <SelectItem value="assigned">貸出中</SelectItem>
+              <SelectItem value="assigned">割り振り済</SelectItem>
               <SelectItem value="suspended">停止中</SelectItem>
             </SelectContent>
           </Select>
@@ -651,7 +581,7 @@ export default function SnsAccounts() {
     <div>
       <PageHeader
         title="SNSアカウント管理"
-        description="SNSアカウントの登録・貸出管理・割り振り管理"
+        description="SNSアカウントの登録・割り振り管理"
         action={
           <Button onClick={openCreate}>
             <Plus className="w-4 h-4 mr-2" />
@@ -676,7 +606,7 @@ export default function SnsAccounts() {
         </Card>
         <Card className="border shadow-sm">
           <CardContent className="p-4">
-            <div className="text-sm text-purple-600">貸出中</div>
+            <div className="text-sm text-purple-600">割り振り済</div>
             <div className="text-2xl font-bold text-purple-600">{assignedCount}</div>
           </CardContent>
         </Card>
@@ -706,8 +636,8 @@ export default function SnsAccounts() {
           <div className="flex flex-col sm:flex-row gap-3 mb-4">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="アカウント名、Gmail、貸出先企業で検索..."
+                <Input
+                placeholder="アカウント名、Gmailで検索..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9"
@@ -721,7 +651,7 @@ export default function SnsAccounts() {
               <SelectContent>
                 <SelectItem value="all">すべて</SelectItem>
                 <SelectItem value="available">空き</SelectItem>
-                <SelectItem value="assigned">貸出中</SelectItem>
+                <SelectItem value="assigned">割り振り済</SelectItem>
                 <SelectItem value="suspended">停止中</SelectItem>
               </SelectContent>
             </Select>
@@ -745,7 +675,7 @@ export default function SnsAccounts() {
                       <TableHead>アカウント名</TableHead>
                       <TableHead>PW</TableHead>
                       <TableHead>チャットPW</TableHead>
-                      <TableHead>貸出先企業</TableHead>
+                      <TableHead>割り振り先</TableHead>
                       <TableHead>ステータス</TableHead>
                       <TableHead>備考</TableHead>
                       <TableHead className="text-right">操作</TableHead>
@@ -794,11 +724,26 @@ export default function SnsAccounts() {
                           <PasswordCell value={account.chat_password} id={`cp-${account.id}`} />
                         </TableCell>
                         <TableCell>
-                          {account.assigned_company_name ? (
-                            <span className="text-sm font-medium">{account.assigned_company_name}</span>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">—</span>
-                          )}
+                          {(() => {
+                            const accountAssignments = allAssignments.filter(a => a.sns_account_id === account.id);
+                            if (accountAssignments.length === 0) return <span className="text-xs text-muted-foreground">未割り振り</span>;
+                            return (
+                              <div className="space-y-0.5">
+                                {accountAssignments.slice(0, 2).map(a => (
+                                  <div key={a.id} className="flex items-center gap-1 text-xs">
+                                    <Building2 className="w-3 h-3 text-muted-foreground shrink-0" />
+                                    <span className="font-medium truncate max-w-[100px]">{a.assigned_org?.name || '—'}</span>
+                                    {a.assigned_staff_name && (
+                                      <span className="text-muted-foreground">({a.assigned_staff_name})</span>
+                                    )}
+                                  </div>
+                                ))}
+                                {accountAssignments.length > 2 && (
+                                  <span className="text-xs text-muted-foreground">他{accountAssignments.length - 2}件</span>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </TableCell>
                         <TableCell>
                           <StatusBadge status={account.status} />
