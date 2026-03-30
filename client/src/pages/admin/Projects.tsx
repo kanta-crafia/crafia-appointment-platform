@@ -303,19 +303,19 @@ export default function Projects() {
             {/* サービス概要 */}
             <div className="space-y-2">
               <Label>サービス概要</Label>
-              <Textarea value={serviceOverview} onChange={(e) => setServiceOverview(e.target.value)} placeholder="サービスの概要を記載" rows={2} />
+              <Textarea value={serviceOverview} onChange={(e) => setServiceOverview(e.target.value)} placeholder="サービスの概要を記載" rows={2} className="!field-sizing-normal resize-y" />
             </div>
 
             {/* 案件詳細 */}
             <div className="space-y-2">
               <Label>案件詳細</Label>
-              <Textarea value={projectDetail} onChange={(e) => setProjectDetail(e.target.value)} placeholder="案件の詳細な説明" rows={3} />
+              <Textarea value={projectDetail} onChange={(e) => setProjectDetail(e.target.value)} placeholder="案件の詳細な説明" rows={3} className="!field-sizing-normal resize-y" />
             </div>
 
             {/* 獲得条件 */}
             <div className="space-y-2">
               <Label>獲得条件</Label>
-              <Textarea value={acquisitionConditions} onChange={(e) => setAcquisitionConditions(e.target.value)} placeholder="アポイント獲得の条件を記載" rows={3} />
+              <Textarea value={acquisitionConditions} onChange={(e) => setAcquisitionConditions(e.target.value)} placeholder="アポイント獲得の条件を記載" rows={3} className="!field-sizing-normal resize-y" />
             </div>
 
             {/* アプローチ禁止リスト */}

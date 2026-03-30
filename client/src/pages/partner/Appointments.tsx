@@ -748,7 +748,7 @@ export default function PartnerAppointments() {
               </div>
               <div className="space-y-2">
                 <Label>メモ</Label>
-                <Textarea value={editNotes} onChange={(e) => setEditNotes(e.target.value)} rows={3} />
+                <Textarea value={editNotes} onChange={(e) => setEditNotes(e.target.value)} rows={3} className="!field-sizing-normal resize-y" />
               </div>
             </div>
           )}

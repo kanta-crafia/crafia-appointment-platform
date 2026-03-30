@@ -432,7 +432,7 @@ export default function NewAppointment() {
                   )}
                 </div>
               )}
-              <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={"\u88dc\u8db3\u60c5\u5831\u3092\u8a18\u5165\n\u30fb\u5148\u65b9\u30cb\u30fc\u30ba/\u8ab2\u984c\n\u30fb\u53d6\u5f97\u30c1\u30e3\u30cd\u30eb\n\u30fb\u6e29\u5ea6\u611f\u3000\u306a\u3069\u30fb\u30fb\u30fb"} rows={5} required />
+              <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={"\u88dc\u8db3\u60c5\u5831\u3092\u8a18\u5165\n\u30fb\u5148\u65b9\u30cb\u30fc\u30ba/\u8ab2\u984c\n\u30fb\u53d6\u5f97\u30c1\u30e3\u30cd\u30eb\n\u30fb\u6e29\u5ea6\u611f\u3000\u306a\u3069\u30fb\u30fb\u30fb"} rows={5} required className="!field-sizing-normal resize-y" />
             </div>
 
             <div className="flex gap-3 pt-2">

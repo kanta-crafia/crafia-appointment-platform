@@ -983,7 +983,7 @@ export default function SubPartnerManagement() {
             )}
             <div>
               <Label>備考</Label>
-              <Textarea value={paymentForm.notes} onChange={e => setPaymentForm(f => ({ ...f, notes: e.target.value }))} placeholder="メモを入力" />
+              <Textarea value={paymentForm.notes} onChange={e => setPaymentForm(f => ({ ...f, notes: e.target.value }))} placeholder="メモを入力" className="!field-sizing-normal resize-y" />
             </div>
           </div>
           <DialogFooter>

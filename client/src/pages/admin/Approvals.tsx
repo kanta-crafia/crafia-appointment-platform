@@ -494,7 +494,7 @@ export default function Approvals() {
               {(selectedAppt.status === 'pending' || selectedAppt.status === 'approved') && (
                 <div className="space-y-2 pt-2 border-t">
                   <Label>理由（却下/取消時は必須）</Label>
-                  <Textarea value={reason} onChange={(e) => setReason(e.target.value)} placeholder="理由を入力..." rows={2} />
+                  <Textarea value={reason} onChange={(e) => setReason(e.target.value)} placeholder="理由を入力..." rows={2} className="!field-sizing-normal resize-y" />
                 </div>
               )}
             </div>
@@ -559,7 +559,7 @@ export default function Approvals() {
               </div>
               <div className="space-y-2">
                 <Label>メモ</Label>
-                <Textarea value={editNotes} onChange={(e) => setEditNotes(e.target.value)} placeholder="メモを入力..." rows={2} />
+                <Textarea value={editNotes} onChange={(e) => setEditNotes(e.target.value)} placeholder="メモを入力..." rows={2} className="!field-sizing-normal resize-y" />
               </div>
             </div>
           )}
