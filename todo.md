@@ -441,4 +441,4 @@
 - [x] SNSアカウントタブでReact Error #310が発生する原因を調査（useMemoが早期リターン後に呼ばれていた）
 - [x] エラー修正の実装（useMemoを早期リターン前に移動 + project.name→project.titleに修正）
 - [x] テスト・検証（103件全パス）
-- [ ] GitHubプッシュ・Vercel公開
+- [x] GitHubプッシュ・Vercel公開
