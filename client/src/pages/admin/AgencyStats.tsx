@@ -22,13 +22,20 @@ interface OrgStats {
   appointments: Appointment[];
 }
 
+interface OrgTreeNode {
+  org: Organization;
+  stats: OrgStats;
+  children: OrgTreeNode[];
+  depth: number;
+}
+
 interface AgencyMonthlyData {
   org: Organization;
   // 自社のみの数値
   own: OrgStats;
-  // 二次代理店の数値
-  children: { org: Organization; stats: OrgStats }[];
-  // 合算（自社 + 二次代理店）
+  // 全子孫企業のツリー
+  descendantTree: OrgTreeNode[];
+  // 合算（自社 + 全子孫企業）
   combined: OrgStats;
 }
 
@@ -41,6 +48,46 @@ function calcStats(appts: Appointment[]): OrgStats {
     cancelled: appts.filter(a => a.status === 'cancelled').length,
     appointments: appts,
   };
+}
+
+/** 再帰的に子孫企業のツリーを構築 */
+function buildOrgTree(
+  parentId: string,
+  allOrgs: Organization[],
+  appointments: Appointment[],
+  depth: number,
+): OrgTreeNode[] {
+  const children = allOrgs.filter(o => o.parent_org_id === parentId);
+  return children.map(child => {
+    const childAppts = appointments.filter(a => a.org_id === child.id);
+    const grandchildren = buildOrgTree(child.id, allOrgs, appointments, depth + 1);
+    return {
+      org: child,
+      stats: calcStats(childAppts),
+      children: grandchildren,
+      depth,
+    };
+  });
+}
+
+/** ツリーから全子孫のアポを再帰的に収集 */
+function collectAllAppointments(nodes: OrgTreeNode[]): Appointment[] {
+  let result: Appointment[] = [];
+  for (const node of nodes) {
+    result = [...result, ...node.stats.appointments];
+    result = [...result, ...collectAllAppointments(node.children)];
+  }
+  return result;
+}
+
+/** ツリーの全ノード数を再帰的にカウント */
+function countDescendants(nodes: OrgTreeNode[]): number {
+  let count = 0;
+  for (const node of nodes) {
+    count += 1;
+    count += countDescendants(node.children);
+  }
+  return count;
 }
 
 export default function AgencyStats() {
@@ -82,26 +129,12 @@ export default function AgencyStats() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // 一次代理店のみ（parent_org_idがないか、Crafia本部を親に持つ）を取得
+  // 一次代理店のみ（Crafia本部を親に持つ）を取得
   const primaryOrgs = useMemo(() => {
-    // Crafia本部のIDを特定
     const crafiaOrg = orgs.find(o => o.name === 'Crafia本部');
     const crafiaId = crafiaOrg?.id;
-    // 一次代理店 = parent_org_idがCrafia本部のもの
     return orgs.filter(o => o.parent_org_id === crafiaId);
   }, [orgs]);
-
-  // 二次代理店のマップ: parent_org_id -> Organization[]
-  const childOrgsMap = useMemo(() => {
-    const map: Record<string, Organization[]> = {};
-    for (const org of orgs) {
-      if (org.parent_org_id && primaryOrgs.some(p => p.id === org.parent_org_id)) {
-        if (!map[org.parent_org_id]) map[org.parent_org_id] = [];
-        map[org.parent_org_id].push(org);
-      }
-    }
-    return map;
-  }, [orgs, primaryOrgs]);
 
   const agencyData = useMemo(() => {
     const result: AgencyMonthlyData[] = [];
@@ -112,33 +145,26 @@ export default function AgencyStats() {
       const ownAppts = appointments.filter(a => a.org_id === org.id);
       const ownStats = calcStats(ownAppts);
 
-      // 二次代理店のアポ
-      const childOrgs = childOrgsMap[org.id] || [];
-      const children: { org: Organization; stats: OrgStats }[] = [];
-      let allAppts = [...ownAppts];
+      // 全子孫企業のツリーを構築
+      const descendantTree = buildOrgTree(org.id, orgs, appointments, 1);
 
-      for (const child of childOrgs) {
-        const childAppts = appointments.filter(a => a.org_id === child.id);
-        if (childAppts.length > 0 || filterOrg !== 'all') {
-          children.push({ org: child, stats: calcStats(childAppts) });
-        }
-        allAppts = [...allAppts, ...childAppts];
-      }
-
+      // 全子孫のアポを収集
+      const allDescendantAppts = collectAllAppointments(descendantTree);
+      const allAppts = [...ownAppts, ...allDescendantAppts];
       const combinedStats = calcStats(allAppts);
 
       if (combinedStats.total === 0 && filterOrg === 'all') continue;
       result.push({
         org,
         own: ownStats,
-        children,
+        descendantTree,
         combined: combinedStats,
       });
     }
 
     result.sort((a, b) => b.combined.total - a.combined.total);
     return result;
-  }, [primaryOrgs, appointments, filterOrg, childOrgsMap]);
+  }, [primaryOrgs, orgs, appointments, filterOrg]);
 
   const totalStats = useMemo(() => ({
     total: appointments.length,
@@ -169,6 +195,108 @@ export default function AgencyStats() {
   const openApptDetail = (appt: Appointment) => {
     setSelectedAppt(appt);
     setShowApptDetail(true);
+  };
+
+  /** 再帰的にツリーの行を描画 */
+  const renderTreeRows = (nodes: OrgTreeNode[], parentExpanded: boolean): React.ReactNode[] => {
+    if (!parentExpanded) return [];
+    const rows: React.ReactNode[] = [];
+
+    for (const node of nodes) {
+      const hasChildren = node.children.length > 0;
+      const isExpanded = expandedRows.has(node.org.id);
+      const nodeRate = node.stats.total > 0
+        ? Math.round((node.stats.approved / node.stats.total) * 100)
+        : 0;
+
+      // Depth-based styling
+      const depthColors = [
+        '', // depth 0 (unused)
+        'bg-blue-50/30', // depth 1 (二次代理店)
+        'bg-purple-50/30', // depth 2 (三次代理店)
+        'bg-teal-50/30', // depth 3 (四次代理店)
+        'bg-orange-50/30', // depth 4+
+      ];
+      const dotColors = [
+        '', // depth 0
+        'bg-blue-500',
+        'bg-purple-500',
+        'bg-teal-500',
+        'bg-orange-500',
+      ];
+      const textColors = [
+        '',
+        'text-blue-700',
+        'text-purple-700',
+        'text-teal-700',
+        'text-orange-700',
+      ];
+      const tierLabels = ['', '二次代理店', '三次代理店', '四次代理店', '五次代理店'];
+
+      const colorIdx = Math.min(node.depth, 4);
+      const paddingLeft = 10 + (node.depth - 1) * 16; // Increasing indent per depth
+
+      // 子孫の合計を計算
+      const descendantAppts = collectAllAppointments(node.children);
+      const nodeTotal = node.stats.total + descendantAppts.length;
+
+      rows.push(
+        <TableRow key={node.org.id} className={depthColors[colorIdx]}>
+          <TableCell>
+            <div className="flex items-center gap-2" style={{ paddingLeft: `${paddingLeft}px` }}>
+              {hasChildren ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-5 w-5 p-0 shrink-0"
+                  onClick={() => toggleExpand(node.org.id)}
+                >
+                  {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                </Button>
+              ) : (
+                <div className="w-5 shrink-0" />
+              )}
+              <div className={`w-1.5 h-1.5 rounded-full ${dotColors[colorIdx]} shrink-0`} />
+              <Building2 className={`w-3.5 h-3.5 ${textColors[colorIdx]} shrink-0`} />
+              <span className={`text-sm ${textColors[colorIdx]} font-medium`}>{node.org.name}</span>
+              <span className={`text-xs ${textColors[colorIdx]} opacity-60`}>（{tierLabels[colorIdx] || `${node.depth + 1}次代理店`}）</span>
+              {hasChildren && (
+                <span className="text-xs text-muted-foreground bg-muted px-1 py-0.5 rounded">
+                  +{countDescendants(node.children)}社
+                </span>
+              )}
+            </div>
+          </TableCell>
+          <TableCell className="text-center text-sm font-semibold">
+            {hasChildren ? (
+              <span title={`自社: ${node.stats.total} / 合計: ${nodeTotal}`}>
+                {nodeTotal}
+                {node.stats.total !== nodeTotal && (
+                  <span className="text-xs text-muted-foreground ml-1">({node.stats.total})</span>
+                )}
+              </span>
+            ) : (
+              node.stats.total
+            )}
+          </TableCell>
+          <TableCell className="text-center"><span className="text-xs text-emerald-600">{node.stats.approved}</span></TableCell>
+          <TableCell className="text-center"><span className="text-xs text-amber-600">{node.stats.pending}</span></TableCell>
+          <TableCell className="text-center"><span className="text-xs text-red-600">{node.stats.rejected}</span></TableCell>
+          <TableCell className="text-center"><span className="text-xs text-gray-500">{node.stats.cancelled}</span></TableCell>
+          <TableCell className="text-center">
+            <span className="text-xs text-muted-foreground">{nodeRate}%</span>
+          </TableCell>
+          <TableCell />
+        </TableRow>
+      );
+
+      // 再帰的に子ノードを描画
+      if (hasChildren) {
+        rows.push(...renderTreeRows(node.children, isExpanded));
+      }
+    }
+
+    return rows;
   };
 
   if (loading) {
@@ -247,7 +375,7 @@ export default function AgencyStats() {
             <BarChart3 className="w-4 h-4" />
             代理店別集計（{monthLabel}）
             <span className="text-xs font-normal text-muted-foreground ml-2">
-              ※ 一次代理店の数値は二次代理店分を含む合算値です
+              ※ 一次代理店の数値は全子孫企業分を含む合算値です
             </span>
           </CardTitle>
         </CardHeader>
@@ -270,7 +398,8 @@ export default function AgencyStats() {
                 const approvalRate = agency.combined.total > 0
                   ? Math.round((agency.combined.approved / agency.combined.total) * 100)
                   : 0;
-                const hasChildren = agency.children.length > 0;
+                const descendantCount = countDescendants(agency.descendantTree);
+                const hasDescendants = descendantCount > 0;
                 const isExpanded = expandedRows.has(agency.org.id);
 
                 return (
@@ -278,7 +407,7 @@ export default function AgencyStats() {
                     <TableRow key={agency.org.id} className="hover:bg-muted/50">
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          {hasChildren ? (
+                          {hasDescendants ? (
                             <Button
                               variant="ghost"
                               size="sm"
@@ -293,9 +422,9 @@ export default function AgencyStats() {
                           <div className="w-2 h-2 rounded-full bg-primary shrink-0" />
                           <span className="font-medium">{agency.org.name}</span>
                           <StatusBadge status={agency.org.status} />
-                          {hasChildren && (
+                          {hasDescendants && (
                             <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-                              +{agency.children.length}社
+                              +{descendantCount}社
                             </span>
                           )}
                         </div>
@@ -333,13 +462,14 @@ export default function AgencyStats() {
                       </TableCell>
                     </TableRow>
 
-                    {/* 二次代理店の内訳行 */}
-                    {hasChildren && isExpanded && (
+                    {/* 展開時: 自社分 + 全子孫企業のツリー */}
+                    {hasDescendants && isExpanded && (
                       <>
                         {/* 一次代理店自社分 */}
                         <TableRow key={`${agency.org.id}_own`} className="bg-blue-50/30">
                           <TableCell>
                             <div className="flex items-center gap-2 pl-10">
+                              <div className="w-5 shrink-0" />
                               <div className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />
                               <span className="text-sm text-blue-700 font-medium">{agency.org.name}（自社分）</span>
                             </div>
@@ -352,33 +482,8 @@ export default function AgencyStats() {
                           <TableCell />
                           <TableCell />
                         </TableRow>
-                        {/* 各二次代理店 */}
-                        {agency.children.map((child) => {
-                          const childRate = child.stats.total > 0
-                            ? Math.round((child.stats.approved / child.stats.total) * 100)
-                            : 0;
-                          return (
-                            <TableRow key={child.org.id} className="bg-purple-50/30">
-                              <TableCell>
-                                <div className="flex items-center gap-2 pl-10">
-                                  <div className="w-1.5 h-1.5 rounded-full bg-purple-500 shrink-0" />
-                                  <Building2 className="w-3.5 h-3.5 text-purple-500" />
-                                  <span className="text-sm text-purple-700 font-medium">{child.org.name}</span>
-                                  <span className="text-xs text-purple-400">（二次代理店）</span>
-                                </div>
-                              </TableCell>
-                              <TableCell className="text-center text-sm font-semibold">{child.stats.total}</TableCell>
-                              <TableCell className="text-center"><span className="text-xs text-emerald-600">{child.stats.approved}</span></TableCell>
-                              <TableCell className="text-center"><span className="text-xs text-amber-600">{child.stats.pending}</span></TableCell>
-                              <TableCell className="text-center"><span className="text-xs text-red-600">{child.stats.rejected}</span></TableCell>
-                              <TableCell className="text-center"><span className="text-xs text-gray-500">{child.stats.cancelled}</span></TableCell>
-                              <TableCell className="text-center">
-                                <span className="text-xs text-muted-foreground">{childRate}%</span>
-                              </TableCell>
-                              <TableCell />
-                            </TableRow>
-                          );
-                        })}
+                        {/* 全子孫企業のツリー */}
+                        {renderTreeRows(agency.descendantTree, true)}
                       </>
                     )}
                   </>
@@ -431,55 +536,13 @@ export default function AgencyStats() {
                 </div>
               </div>
 
-              {/* 内訳（二次代理店がある場合） */}
-              {selectedAgency.children.length > 0 && (
-                <div className="mb-4 p-3 bg-muted/30 rounded-lg border">
-                  <p className="text-xs font-semibold text-muted-foreground mb-2">内訳</p>
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between text-sm">
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-blue-500" />
-                        <span className="font-medium">{selectedAgency.org.name}（自社分）</span>
-                      </div>
-                      <span className="font-bold">{selectedAgency.own.total}件</span>
-                    </div>
-                    {selectedAgency.children.map(child => (
-                      <div key={child.org.id} className="flex items-center justify-between text-sm">
-                        <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-full bg-purple-500" />
-                          <span className="font-medium text-purple-700">{child.org.name}（二次代理店）</span>
-                        </div>
-                        <span className="font-bold">{child.stats.total}件</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+              {/* 内訳（子孫企業がある場合） */}
+              {selectedAgency.descendantTree.length > 0 && (
+                <DetailBreakdown agency={selectedAgency} />
               )}
 
-              {/* Tabs: 全て / 自社 / 二次代理店別 */}
-              <Tabs defaultValue="all">
-                <TabsList className="mb-3">
-                  <TabsTrigger value="all">全て ({selectedAgency.combined.total})</TabsTrigger>
-                  <TabsTrigger value="own">{selectedAgency.org.name} ({selectedAgency.own.total})</TabsTrigger>
-                  {selectedAgency.children.map(child => (
-                    <TabsTrigger key={child.org.id} value={child.org.id}>
-                      {child.org.name} ({child.stats.total})
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
-
-                <TabsContent value="all">
-                  <AppointmentTable appointments={selectedAgency.combined.appointments} orgs={orgs} onDetail={openApptDetail} />
-                </TabsContent>
-                <TabsContent value="own">
-                  <AppointmentTable appointments={selectedAgency.own.appointments} orgs={orgs} onDetail={openApptDetail} />
-                </TabsContent>
-                {selectedAgency.children.map(child => (
-                  <TabsContent key={child.org.id} value={child.org.id}>
-                    <AppointmentTable appointments={child.stats.appointments} orgs={orgs} onDetail={openApptDetail} />
-                  </TabsContent>
-                ))}
-              </Tabs>
+              {/* Tabs: 全て / 自社 / 子孫企業別 */}
+              <DetailTabs agency={selectedAgency} orgs={orgs} onDetail={openApptDetail} />
             </div>
           )}
         </DialogContent>
@@ -562,6 +625,90 @@ export default function AgencyStats() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+/** 詳細ダイアログの内訳セクション */
+function DetailBreakdown({ agency }: { agency: AgencyMonthlyData }) {
+  const flattenTree = (nodes: OrgTreeNode[]): { org: Organization; stats: OrgStats; depth: number }[] => {
+    const result: { org: Organization; stats: OrgStats; depth: number }[] = [];
+    for (const node of nodes) {
+      result.push({ org: node.org, stats: node.stats, depth: node.depth });
+      result.push(...flattenTree(node.children));
+    }
+    return result;
+  };
+
+  const flatDescendants = flattenTree(agency.descendantTree);
+  const tierLabels = ['', '二次代理店', '三次代理店', '四次代理店', '五次代理店'];
+  const dotColors = ['', 'bg-blue-500', 'bg-purple-500', 'bg-teal-500', 'bg-orange-500'];
+
+  return (
+    <div className="mb-4 p-3 bg-muted/30 rounded-lg border">
+      <p className="text-xs font-semibold text-muted-foreground mb-2">内訳</p>
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between text-sm">
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-primary" />
+            <span className="font-medium">{agency.org.name}（自社分）</span>
+          </div>
+          <span className="font-bold">{agency.own.total}件</span>
+        </div>
+        {flatDescendants.map(item => {
+          const colorIdx = Math.min(item.depth, 4);
+          return (
+            <div key={item.org.id} className="flex items-center justify-between text-sm" style={{ paddingLeft: `${(item.depth - 1) * 12}px` }}>
+              <div className="flex items-center gap-2">
+                <div className={`w-2 h-2 rounded-full ${dotColors[colorIdx]}`} />
+                <span className="font-medium">{item.org.name}</span>
+                <span className="text-xs text-muted-foreground">（{tierLabels[colorIdx] || `${item.depth + 1}次代理店`}）</span>
+              </div>
+              <span className="font-bold">{item.stats.total}件</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** 詳細ダイアログのタブセクション */
+function DetailTabs({ agency, orgs, onDetail }: { agency: AgencyMonthlyData; orgs: Organization[]; onDetail: (a: Appointment) => void }) {
+  const flattenTree = (nodes: OrgTreeNode[]): { org: Organization; stats: OrgStats; depth: number }[] => {
+    const result: { org: Organization; stats: OrgStats; depth: number }[] = [];
+    for (const node of nodes) {
+      result.push({ org: node.org, stats: node.stats, depth: node.depth });
+      result.push(...flattenTree(node.children));
+    }
+    return result;
+  };
+
+  const flatDescendants = flattenTree(agency.descendantTree);
+
+  return (
+    <Tabs defaultValue="all">
+      <TabsList className="mb-3 flex-wrap h-auto gap-1">
+        <TabsTrigger value="all">全て ({agency.combined.total})</TabsTrigger>
+        <TabsTrigger value="own">{agency.org.name} ({agency.own.total})</TabsTrigger>
+        {flatDescendants.map(item => (
+          <TabsTrigger key={item.org.id} value={item.org.id}>
+            {item.org.name} ({item.stats.total})
+          </TabsTrigger>
+        ))}
+      </TabsList>
+
+      <TabsContent value="all">
+        <AppointmentTable appointments={agency.combined.appointments} orgs={orgs} onDetail={onDetail} />
+      </TabsContent>
+      <TabsContent value="own">
+        <AppointmentTable appointments={agency.own.appointments} orgs={orgs} onDetail={onDetail} />
+      </TabsContent>
+      {flatDescendants.map(item => (
+        <TabsContent key={item.org.id} value={item.org.id}>
+          <AppointmentTable appointments={item.stats.appointments} orgs={orgs} onDetail={onDetail} />
+        </TabsContent>
+      ))}
+    </Tabs>
   );
 }
 
