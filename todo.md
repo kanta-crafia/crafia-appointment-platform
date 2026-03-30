@@ -446,5 +446,11 @@
 ## v3.6.4: SNSアカウント追加の備考欄に文字が入力できない問題の修正
 - [x] 原因調査（field-sizing-contentがIME入力中にTextareaの高さを変え、Dialogがスクロールしてフォーカスが外れる）
 - [x] 全Textareaに!field-sizing-normal resize-yを適用（6ファイル・12箇所）
-- [ ] テスト・検証
+- [x] テスト・検証（103件全パス）
+- [x] GitHubプッシュ・Vercel公開
+
+## v3.6.5: SNSアカウント管理の備考欄IME入力バグの根本修正
+- [x] 原因調査（textarea.tsxのデフォルトクラスにfield-sizing-contentが残っていた）
+- [x] 根本修正（textarea.tsxからfield-sizing-contentを完全削除、各ファイルの上書きクラスも削除）
+- [x] テスト・検証（103件全パス）
 - [ ] GitHubプッシュ・Vercel公開

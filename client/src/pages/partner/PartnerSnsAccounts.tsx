@@ -650,7 +650,6 @@ export default function PartnerSnsAccounts() {
                 value={assignNotes}
                 onChange={(e) => setAssignNotes(e.target.value)}
                 rows={2}
-                className="!field-sizing-normal resize-y"
               />
             </div>
           </div>
@@ -721,7 +720,6 @@ export default function PartnerSnsAccounts() {
                 value={editNotes}
                 onChange={(e) => setEditNotes(e.target.value)}
                 rows={2}
-                className="!field-sizing-normal resize-y"
               />
             </div>
           </div>
