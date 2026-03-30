@@ -13,11 +13,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import {
   Building2, Users, ClipboardCheck, TrendingUp, Clock, CheckCircle2,
-  XCircle, DollarSign, Plus, Edit, Eye, EyeOff, Save, Pencil, ChevronRight
+  XCircle, DollarSign, Plus, Edit, Eye, EyeOff, Save, Pencil, ChevronRight, Download, ChevronLeft
 } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { toast } from 'sonner';
-import { format } from 'date-fns';
+import { format, addMonths, subMonths, isSameMonth } from 'date-fns';
+import { ja } from 'date-fns/locale';
 
 // Helper: build a tree of descendant orgs from a flat list
 function getDescendantOrgs(allOrgs: Organization[], rootOrgId: string): Organization[] {
@@ -75,6 +76,7 @@ export default function SubPartnerManagement() {
   const [payments, setPayments] = useState<SubPartnerPayment[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
+  const [selectedMonth, setSelectedMonth] = useState(() => new Date());
 
   // Payment dialog
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
@@ -242,6 +244,79 @@ export default function SubPartnerManagement() {
   }, [userOrgId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // Month-filtered appointments (by meeting_datetime)
+  const monthFilteredAppts = subAppointments.filter(a => {
+    if (!a.meeting_datetime) return false;
+    return isSameMonth(new Date(a.meeting_datetime), selectedMonth);
+  });
+
+  // CSV download for appointments tab
+  const handleApptCsvDownload = () => {
+    const appts = monthFilteredAppts;
+    if (appts.length === 0) return;
+    const statusLabel = (s: string) => {
+      switch (s) {
+        case 'approved': return '承認済';
+        case 'pending': return '保留中';
+        case 'rejected': return '却下';
+        case 'cancelled': return '取消';
+        default: return s;
+      }
+    };
+    const headers = ['登録企業', '案件番号', '案件名', '先方企業名', '先方担当者名', '獲得者名', '商談日時', 'ステータス', 'メモ', '登録日'];
+    const rows = appts.map(a => {
+      const org = subOrgs.find(o => o.id === a.org_id);
+      const proj = (a as any).project;
+      return [
+        org?.name || '',
+        proj?.project_number || '',
+        proj?.title || '',
+        a.target_company_name,
+        a.contact_person || '',
+        a.acquirer_name || '',
+        a.meeting_datetime ? format(new Date(a.meeting_datetime), 'yyyy/MM/dd HH:mm') : '',
+        statusLabel(a.status),
+        (a.notes || '').replace(/\n/g, ' '),
+        format(new Date(a.created_at), 'yyyy/MM/dd'),
+      ];
+    });
+    const csvContent = '\uFEFF' + [headers, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const el = document.createElement('a');
+    el.href = url;
+    el.download = `傘下代理店アポ一覧_${format(selectedMonth, 'yyyyMM')}.csv`;
+    el.click();
+    URL.revokeObjectURL(url);
+    toast.success('CSVをダウンロードしました');
+  };
+
+  // CSV download for overview tab
+  const handleOverviewCsvDownload = () => {
+    if (subOrgs.length === 0) return;
+    const headers = ['代理店名', '階層', '合計アポ', '承認済', '保留中', '却下'];
+    const rows = subOrgs.map(org => {
+      const stats = getSubOrgStats(org.id);
+      return [
+        org.name,
+        getTierLabel(org),
+        stats.total,
+        stats.approved,
+        stats.pending,
+        stats.rejected,
+      ];
+    });
+    const csvContent = '\uFEFF' + [headers, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const el = document.createElement('a');
+    el.href = url;
+    el.download = `代理店概要_${format(new Date(), 'yyyyMMdd')}.csv`;
+    el.click();
+    URL.revokeObjectURL(url);
+    toast.success('CSVをダウンロードしました');
+  };
 
   // Stats per sub org (including its own descendants)
   const getSubOrgStats = (orgId: string) => {
@@ -536,7 +611,13 @@ export default function SubPartnerManagement() {
 
         {/* Overview Tab */}
         <TabsContent value="overview">
-          <div className="space-y-4">
+          <div className="flex justify-end mb-3">
+            <Button variant="outline" size="sm" className="gap-1.5" onClick={handleOverviewCsvDownload} disabled={subOrgs.length === 0}>
+              <Download className="w-4 h-4" />
+              CSV
+            </Button>
+          </div>
+          <div className="space-y-2">
             {subOrgs.map(org => {
               const stats = getSubOrgStats(org.id);
               const users = subUsers[org.id] || [];
@@ -545,74 +626,63 @@ export default function SubPartnerManagement() {
               const parentOrg = allOrgs.find(o => o.id === org.parent_org_id);
 
               return (
-                <Card key={org.id} className={`border shadow-sm ${depth > 0 ? 'ml-' + Math.min(depth * 4, 16) : ''}`}
+                <Card key={org.id} className="border shadow-sm"
                   style={{ marginLeft: depth > 0 ? `${depth * 1.5}rem` : undefined }}>
-                  <CardHeader className="pb-3">
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-base font-semibold flex items-center gap-2">
-                        {depth > 0 && <ChevronRight className="w-4 h-4 text-muted-foreground" />}
-                        <Building2 className="w-4 h-4 text-muted-foreground" />
-                        {org.name}
+                  <CardContent className="py-3 px-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        {depth > 0 && <ChevronRight className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />}
+                        <Building2 className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                        <span className="font-semibold text-sm truncate">{org.name}</span>
                         {!isDirectChild && parentOrg && (
-                          <span className="text-xs text-muted-foreground font-normal ml-2">
-                            (親: {parentOrg.name})
-                          </span>
+                          <span className="text-xs text-muted-foreground">(親: {parentOrg.name})</span>
                         )}
-                      </CardTitle>
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline" className="text-xs">
-                          {getTierLabel(org)}
-                        </Badge>
-                        <Badge variant="outline" className="text-xs">{org.status === 'active' ? '有効' : '無効'}</Badge>
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <Badge variant="outline" className="text-xs py-0">{getTierLabel(org)}</Badge>
+                        <Badge variant="outline" className="text-xs py-0">{org.status === 'active' ? '有効' : '無効'}</Badge>
                       </div>
                     </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
-                      <div className="text-center p-3 bg-muted/30 rounded-lg">
-                        <p className="text-2xl font-bold">{stats.total}</p>
-                        <p className="text-xs text-muted-foreground">合計アポ</p>
+                    <div className="grid grid-cols-4 gap-2">
+                      <div className="text-center py-1.5 bg-muted/30 rounded">
+                        <p className="text-lg font-bold leading-tight">{stats.total}</p>
+                        <p className="text-[10px] text-muted-foreground">合計</p>
                       </div>
-                      <div className="text-center p-3 bg-emerald-50 rounded-lg">
-                        <p className="text-2xl font-bold text-emerald-600">{stats.approved}</p>
-                        <p className="text-xs text-muted-foreground">承認済</p>
+                      <div className="text-center py-1.5 bg-emerald-50 rounded">
+                        <p className="text-lg font-bold text-emerald-600 leading-tight">{stats.approved}</p>
+                        <p className="text-[10px] text-muted-foreground">承認</p>
                       </div>
-                      <div className="text-center p-3 bg-amber-50 rounded-lg">
-                        <p className="text-2xl font-bold text-amber-600">{stats.pending}</p>
-                        <p className="text-xs text-muted-foreground">保留中</p>
+                      <div className="text-center py-1.5 bg-amber-50 rounded">
+                        <p className="text-lg font-bold text-amber-600 leading-tight">{stats.pending}</p>
+                        <p className="text-[10px] text-muted-foreground">保留</p>
                       </div>
-                      <div className="text-center p-3 bg-red-50 rounded-lg">
-                        <p className="text-2xl font-bold text-red-600">{stats.rejected}</p>
-                        <p className="text-xs text-muted-foreground">却下</p>
+                      <div className="text-center py-1.5 bg-red-50 rounded">
+                        <p className="text-lg font-bold text-red-600 leading-tight">{stats.rejected}</p>
+                        <p className="text-[10px] text-muted-foreground">却下</p>
                       </div>
                     </div>
-
-                    {/* Users info */}
+                    {/* Users info - compact */}
                     {users.length > 0 && (
-                      <div className="border-t pt-3">
-                        <p className="text-sm font-medium mb-2 flex items-center gap-1.5">
-                          <Users className="w-3.5 h-3.5 text-muted-foreground" />
-                          ユーザー情報
-                        </p>
-                        <div className="space-y-1.5">
+                      <div className="border-t mt-2 pt-2">
+                        <div className="flex flex-wrap gap-2">
                           {users.map((u, i) => (
-                            <div key={i} className="flex items-center gap-3 text-sm bg-muted/20 rounded px-3 py-1.5">
-                              <span className="font-medium min-w-[80px]">{u.full_name || u.login_id}</span>
+                            <div key={i} className="flex items-center gap-2 text-xs bg-muted/20 rounded px-2 py-1">
+                              <span className="font-medium">{u.full_name || u.login_id}</span>
                               <span className="text-muted-foreground">ID: {u.login_id}</span>
-                              <span className="text-muted-foreground flex items-center gap-1">
+                              <span className="text-muted-foreground flex items-center gap-0.5">
                                 PW:
                                 {visiblePw[`${org.id}-${i}`] ? (
                                   <>
                                     <span className="font-mono">{u.plain_password || '未設定'}</span>
-                                    <button onClick={() => setVisiblePw(prev => ({ ...prev, [`${org.id}-${i}`]: false }))} className="ml-1">
-                                      <EyeOff className="w-3.5 h-3.5" />
+                                    <button onClick={() => setVisiblePw(prev => ({ ...prev, [`${org.id}-${i}`]: false }))}>
+                                      <EyeOff className="w-3 h-3" />
                                     </button>
                                   </>
                                 ) : (
                                   <>
-                                    <span className="font-mono">••••••</span>
-                                    <button onClick={() => setVisiblePw(prev => ({ ...prev, [`${org.id}-${i}`]: true }))} className="ml-1">
-                                      <Eye className="w-3.5 h-3.5" />
+                                    <span className="font-mono">••••</span>
+                                    <button onClick={() => setVisiblePw(prev => ({ ...prev, [`${org.id}-${i}`]: true }))}>
+                                      <Eye className="w-3 h-3" />
                                     </button>
                                   </>
                                 )}
@@ -682,11 +752,30 @@ export default function SubPartnerManagement() {
         <TabsContent value="appointments">
           <Card className="border shadow-sm">
             <CardHeader className="pb-3">
-              <CardTitle className="text-base font-semibold">傘下代理店アポ一覧</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base font-semibold">傘下代理店アポ一覧</CardTitle>
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-1">
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setSelectedMonth(prev => subMonths(prev, 1))}>
+                      <ChevronLeft className="w-4 h-4" />
+                    </Button>
+                    <span className="text-sm font-medium min-w-[100px] text-center">
+                      {format(selectedMonth, 'yyyy年M月', { locale: ja })}
+                    </span>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setSelectedMonth(prev => addMonths(prev, 1))}>
+                      <ChevronRight className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  <Button variant="outline" size="sm" className="gap-1.5" onClick={handleApptCsvDownload} disabled={monthFilteredAppts.length === 0}>
+                    <Download className="w-4 h-4" />
+                    CSV
+                  </Button>
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
-              {subAppointments.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-8 text-center">アポイントはまだありません</p>
+              {monthFilteredAppts.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-8 text-center">{format(selectedMonth, 'yyyy年M月', { locale: ja })}のアポイントはありません</p>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
@@ -702,9 +791,9 @@ export default function SubPartnerManagement() {
                       </tr>
                     </thead>
                     <tbody>
-                      {subAppointments.map(a => {
+                      {monthFilteredAppts.map(a => {
                         const org = subOrgs.find(o => o.id === a.org_id);
-                        const proj = a.project as any;
+                        const proj = (a as any).project;
                         return (
                           <tr key={a.id} className="border-b hover:bg-muted/20 transition-colors">
                             <td className="p-3">

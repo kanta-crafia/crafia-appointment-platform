@@ -3,7 +3,7 @@ import { Link, useLocation } from 'wouter';
 import { cn } from '@/lib/utils';
 import {
   Building2, LayoutDashboard, Briefcase, GitBranch, ClipboardCheck,
-  Bell, LogOut, ChevronLeft, ChevronRight, FileText, BarChart3, Menu, PieChart, Share2, Users
+  Bell, LogOut, ChevronLeft, ChevronRight, FileText, BarChart3, Menu, PieChart, Share2, Users, Settings
 } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
 import { APP_VERSION } from '@shared/version';
@@ -82,6 +82,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { label: '通知', href: '/notifications', icon: Bell, badge: unreadCount },
     { label: '監査ログ', href: '/audit-logs', icon: FileText, adminOnly: true },
     ...(hasSubOrgs ? [{ label: '代理店管理', href: '/sub-partners', icon: Users }] : []),
+    { label: '設定', href: '/settings', icon: Settings },
   ];
 
   const partnerNav: NavItem[] = [
@@ -89,7 +90,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { label: '割り当て案件', href: '/my-allocations', icon: Briefcase },
     { label: 'アポ登録', href: '/appointments/new', icon: ClipboardCheck },
     { label: 'アポ一覧', href: '/appointments', icon: FileText },
-    ...(hasSubOrgs ? [{ label: '代理店管理', href: '/sub-partners', icon: Users }] : []),
+    ...(hasSubOrgs ? [
+      { label: '代理店管理', href: '/sub-partners', icon: Users },
+      { label: '代理店別集計', href: '/partner-agency-stats', icon: PieChart },
+    ] : []),
+    { label: 'SNSアカウント', href: '/sns-accounts', icon: Share2 },
+    { label: '設定', href: '/settings', icon: Settings },
     { label: '通知', href: '/notifications', icon: Bell, badge: unreadCount },
   ];
 

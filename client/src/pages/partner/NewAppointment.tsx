@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { supabase, type Allocation, type SubAllocationPrice } from '@/lib/supabase';
+import { supabase, type Allocation, type SubAllocationPrice, type SalesStaff } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLocation, useSearch } from 'wouter';
 import { PageHeader } from '@/components/PageHeader';
@@ -40,6 +40,7 @@ export default function NewAppointment() {
   const [acquirerName, setAcquirerName] = useState('');
   const [acquiredCompanyName, setAcquiredCompanyName] = useState('client');
   const [showProjectDetail, setShowProjectDetail] = useState(false);
+  const [salesStaff, setSalesStaff] = useState<SalesStaff[]>([]);
 
   // Stabilize dependency: use user.id + user.org_id instead of user object
   const userId = user?.id;
@@ -145,12 +146,27 @@ export default function NewAppointment() {
 
   useEffect(() => { fetchAllocations(); }, [fetchAllocations]);
 
-  // ユーザー名を獲得者名のデフォルトに設定
+  // 営業担当者リストを取得
   useEffect(() => {
-    if (user?.full_name && !acquirerName) {
+    if (!userOrgId) return;
+    const fetchStaff = async () => {
+      const { data } = await supabase
+        .from('sales_staff')
+        .select('*')
+        .eq('org_id', userOrgId)
+        .eq('status', 'active')
+        .order('created_at', { ascending: true });
+      setSalesStaff(data || []);
+    };
+    fetchStaff();
+  }, [userOrgId]);
+
+  // ユーザー名を獲得者名のデフォルトに設定（営業担当者が未登録の場合のみ）
+  useEffect(() => {
+    if (user?.full_name && !acquirerName && salesStaff.length === 0) {
       setAcquirerName(user.full_name);
     }
-  }, [user]);
+  }, [user, salesStaff]);
 
   const selectedAlloc = allocations.find(a => a.id === allocationId);
   const selectedProject = selectedAlloc ? (selectedAlloc as any).project : null;
@@ -367,7 +383,18 @@ export default function NewAppointment() {
               </div>
               <div className="space-y-2">
                 <Label>獲得者名 <span className="text-destructive">*</span></Label>
-                <Input value={acquirerName} onChange={(e) => setAcquirerName(e.target.value)} placeholder="獲得者の名前" required />
+                {salesStaff.length > 0 ? (
+                  <Select value={acquirerName} onValueChange={setAcquirerName}>
+                    <SelectTrigger><SelectValue placeholder="担当者を選択" /></SelectTrigger>
+                    <SelectContent>
+                      {salesStaff.map(s => (
+                        <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input value={acquirerName} onChange={(e) => setAcquirerName(e.target.value)} placeholder="獲得者の名前" required />
+                )}
               </div>
             </div>
 

@@ -65,16 +65,32 @@ export default function Approvals() {
   };
 
   const handleCsvDownload = () => {
-    const headers = ['案件番号', '案件名', '先方企業名', '先方担当者名', '登録企業', '獲得者名', '商談日時', 'ステータス', 'メモ', '登録日'];
+    const headers = [
+      '案件番号', '案件名', '先方企業名', '先方担当者名',
+      '登録企業', '獲得日', '獲得者名', '獲得時の名乗り会社',
+      '商談日時', 'ステータス',
+      '承認日時', '却下理由',
+      'メモ', '登録日',
+    ];
+    const companyTypeLabel = (t: string | null) => {
+      if (t === 'client') return 'クライアント名';
+      if (t === 'crafia') return 'Crafia名乗り';
+      if (t === 'self') return '自己着座';
+      return t || '';
+    };
     const rows = filtered.map(a => [
       (a as any).project?.project_number || '',
       (a as any).project?.title || '',
       a.target_company_name,
       a.contact_person || '',
       (a as any).organization?.name || '',
-      (a as any).acquirer_name || '',
+      a.acquisition_date || '',
+      a.acquirer_name || '',
+      companyTypeLabel(a.acquisition_company_type),
       format(new Date(a.meeting_datetime), 'yyyy/MM/dd HH:mm'),
       statusLabel(a.status),
+      a.approved_at ? format(new Date(a.approved_at), 'yyyy/MM/dd HH:mm') : '',
+      a.rejected_reason || '',
       (a.notes || '').replace(/\n/g, ' '),
       format(new Date(a.created_at), 'yyyy/MM/dd HH:mm'),
     ]);

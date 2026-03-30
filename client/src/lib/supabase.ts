@@ -207,3 +207,29 @@ export interface AuditLog {
   after_json: Record<string, unknown> | null;
   created_at: string;
 }
+
+export interface SnsAccountAssignment {
+  id: string;
+  sns_account_id: string;
+  assigned_org_id: string;
+  allocation_id: string | null;
+  assigned_staff_name: string | null;
+  assigned_by_org_id: string;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  // Joined fields
+  sns_account?: SnsAccount;
+  assigned_org?: Organization;
+  allocation?: Allocation;
+  assigned_by_org?: Organization;
+}
+
+export interface SalesStaff {
+  id: string;
+  org_id: string;
+  name: string;
+  status: 'active' | 'inactive';
+  created_at: string;
+  updated_at: string;
+}

@@ -1,5 +1,6 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase, type Appointment, type Organization } from '@/lib/supabase';
+import { useAuth } from '@/contexts/AuthContext';
 import { PageHeader } from '@/components/PageHeader';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,9 +10,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { BarChart3, TrendingUp, ChevronLeft, ChevronRight, ExternalLink, Eye, ChevronDown, ChevronUp, Building2 } from 'lucide-react';
+import { BarChart3, TrendingUp, ChevronLeft, ChevronRight, ExternalLink, Eye, ChevronDown, ChevronUp, Building2, Download } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, subMonths, addMonths } from 'date-fns';
 import { ja } from 'date-fns/locale';
+import { toast } from 'sonner';
 
 interface OrgStats {
   total: number;
@@ -31,11 +33,8 @@ interface OrgTreeNode {
 
 interface AgencyMonthlyData {
   org: Organization;
-  // 自社のみの数値
   own: OrgStats;
-  // 全子孫企業のツリー
   descendantTree: OrgTreeNode[];
-  // 合算（自社 + 全子孫企業）
   combined: OrgStats;
 }
 
@@ -50,7 +49,6 @@ function calcStats(appts: Appointment[]): OrgStats {
   };
 }
 
-/** 再帰的に子孫企業のツリーを構築 */
 function buildOrgTree(
   parentId: string,
   allOrgs: Organization[],
@@ -70,7 +68,6 @@ function buildOrgTree(
   });
 }
 
-/** ツリーから全子孫のアポを再帰的に収集 */
 function collectAllAppointments(nodes: OrgTreeNode[]): Appointment[] {
   let result: Appointment[] = [];
   for (const node of nodes) {
@@ -80,7 +77,6 @@ function collectAllAppointments(nodes: OrgTreeNode[]): Appointment[] {
   return result;
 }
 
-/** ツリーの全ノード数を再帰的にカウント */
 function countDescendants(nodes: OrgTreeNode[]): number {
   let count = 0;
   for (const node of nodes) {
@@ -90,7 +86,25 @@ function countDescendants(nodes: OrgTreeNode[]): number {
   return count;
 }
 
-export default function AgencyStats() {
+function getDescendantOrgIds(allOrgs: Organization[], rootOrgId: string): string[] {
+  const ids: string[] = [];
+  const queue = [rootOrgId];
+  while (queue.length > 0) {
+    const parentId = queue.shift()!;
+    const children = allOrgs.filter(o => o.parent_org_id === parentId && o.id !== rootOrgId);
+    for (const child of children) {
+      if (!ids.includes(child.id)) {
+        ids.push(child.id);
+        queue.push(child.id);
+      }
+    }
+  }
+  return ids;
+}
+
+export default function PartnerAgencyStats() {
+  const { user } = useAuth();
+  const userOrgId = user?.org_id;
   const [orgs, setOrgs] = useState<Organization[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -103,68 +117,68 @@ export default function AgencyStats() {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
   const fetchData = useCallback(async () => {
+    if (!userOrgId) return;
     setLoading(true);
     try {
       const monthStart = format(currentMonth, 'yyyy-MM-dd');
       const monthEnd = format(endOfMonth(currentMonth), 'yyyy-MM-dd');
 
-      const [orgRes, apptRes] = await Promise.all([
-        supabase.from('organizations').select('*').order('name'),
-        supabase
-          .from('appointments')
-          .select('*, project:projects(title, project_number, company_name, unit_price), organization:organizations(name), creator:users!appointments_created_by_user_id_fkey(full_name, login_id)')
-          .gte('meeting_datetime', monthStart + 'T00:00:00')
-          .lte('meeting_datetime', monthEnd + 'T23:59:59')
-          .order('meeting_datetime', { ascending: false }),
-      ]);
+      // Get all orgs (RLS will limit visibility)
+      const { data: orgData } = await supabase.from('organizations').select('*').order('name');
+      const allOrgList = orgData || [];
+      setOrgs(allOrgList);
 
-      setOrgs(orgRes.data || []);
-      setAppointments(apptRes.data || []);
+      // Get descendant org IDs
+      const descendantIds = getDescendantOrgIds(allOrgList, userOrgId);
+      const allRelevantIds = [userOrgId, ...descendantIds];
+
+      // Get appointments for self + all descendants
+      const { data: apptData } = await supabase
+        .from('appointments')
+        .select('*, project:projects(title, project_number, company_name, unit_price), organization:organizations(name), creator:users!appointments_created_by_user_id_fkey(full_name, login_id)')
+        .in('org_id', allRelevantIds)
+        .gte('meeting_datetime', monthStart + 'T00:00:00')
+        .lte('meeting_datetime', monthEnd + 'T23:59:59')
+        .order('meeting_datetime', { ascending: false });
+
+      setAppointments(apptData || []);
     } catch (e) {
-      console.error('AgencyStats fetch error:', e);
+      console.error('PartnerAgencyStats fetch error:', e);
     } finally {
       setLoading(false);
     }
-  }, [currentMonth]);
+  }, [currentMonth, userOrgId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // 一次代理店のみ（Crafia本部を親に持つ）を取得
-  const primaryOrgs = useMemo(() => {
-    const crafiaOrg = orgs.find(o => o.name === 'Crafia本部');
-    const crafiaId = crafiaOrg?.id;
-    return orgs.filter(o => o.parent_org_id === crafiaId);
-  }, [orgs]);
+  // 直下の子企業を取得
+  const directChildren = useMemo(() => {
+    return orgs.filter(o => o.parent_org_id === userOrgId);
+  }, [orgs, userOrgId]);
 
   const agencyData = useMemo(() => {
     const result: AgencyMonthlyData[] = [];
-    const targetOrgs = filterOrg === 'all' ? primaryOrgs : primaryOrgs.filter(o => o.id === filterOrg);
+    const targetOrgs = filterOrg === 'all' ? directChildren : directChildren.filter(o => o.id === filterOrg);
 
     for (const org of targetOrgs) {
-      // 自社のアポ
       const ownAppts = appointments.filter(a => a.org_id === org.id);
       const ownStats = calcStats(ownAppts);
-
-      // 全子孫企業のツリーを構築
       const descendantTree = buildOrgTree(org.id, orgs, appointments, 1);
-
-      // 全子孫のアポを収集
       const allDescendantAppts = collectAllAppointments(descendantTree);
       const allAppts = [...ownAppts, ...allDescendantAppts];
       const combinedStats = calcStats(allAppts);
 
       if (combinedStats.total === 0 && filterOrg === 'all') continue;
-      result.push({
-        org,
-        own: ownStats,
-        descendantTree,
-        combined: combinedStats,
-      });
+      result.push({ org, own: ownStats, descendantTree, combined: combinedStats });
     }
 
     result.sort((a, b) => b.combined.total - a.combined.total);
     return result;
-  }, [primaryOrgs, orgs, appointments, filterOrg]);
+  }, [directChildren, orgs, appointments, filterOrg]);
+
+  // 自社分のアポ統計
+  const ownAppts = useMemo(() => appointments.filter(a => a.org_id === userOrgId), [appointments, userOrgId]);
+  const ownStats = useMemo(() => calcStats(ownAppts), [ownAppts]);
 
   const totalStats = useMemo(() => ({
     total: appointments.length,
@@ -197,7 +211,43 @@ export default function AgencyStats() {
     setShowApptDetail(true);
   };
 
-  /** 再帰的にツリーの行を描画 */
+  // CSV download
+  const handleCsvDownload = () => {
+    if (appointments.length === 0) return;
+    const statusLabel = (s: string) => {
+      switch (s) {
+        case 'approved': return '承認済';
+        case 'pending': return '保留中';
+        case 'rejected': return '却下';
+        case 'cancelled': return '取消';
+        default: return s;
+      }
+    };
+    const headers = ['登録企業', '案件番号', '案件名', '先方企業名', '担当者', '獲得者名', '商談日時', 'ステータス', '登録日'];
+    const rows = appointments.map(a => {
+      return [
+        (a as any).organization?.name || '',
+        (a as any).project?.project_number || '',
+        (a as any).project?.title || '',
+        a.target_company_name,
+        a.contact_person || '',
+        a.acquirer_name || '',
+        format(new Date(a.meeting_datetime), 'yyyy/MM/dd HH:mm'),
+        statusLabel(a.status),
+        format(new Date(a.created_at), 'yyyy/MM/dd'),
+      ];
+    });
+    const csvContent = '\uFEFF' + [headers, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const el = document.createElement('a');
+    el.href = url;
+    el.download = `代理店別集計_${format(currentMonth, 'yyyyMM')}.csv`;
+    el.click();
+    URL.revokeObjectURL(url);
+    toast.success('CSVをダウンロードしました');
+  };
+
   const renderTreeRows = (nodes: OrgTreeNode[], parentExpanded: boolean): React.ReactNode[] => {
     if (!parentExpanded) return [];
     const rows: React.ReactNode[] = [];
@@ -209,34 +259,14 @@ export default function AgencyStats() {
         ? Math.round((node.stats.approved / node.stats.total) * 100)
         : 0;
 
-      // Depth-based styling
-      const depthColors = [
-        '', // depth 0 (unused)
-        'bg-blue-50/30', // depth 1 (二次代理店)
-        'bg-purple-50/30', // depth 2 (三次代理店)
-        'bg-teal-50/30', // depth 3 (四次代理店)
-        'bg-orange-50/30', // depth 4+
-      ];
-      const dotColors = [
-        '', // depth 0
-        'bg-blue-500',
-        'bg-purple-500',
-        'bg-teal-500',
-        'bg-orange-500',
-      ];
-      const textColors = [
-        '',
-        'text-blue-700',
-        'text-purple-700',
-        'text-teal-700',
-        'text-orange-700',
-      ];
+      const depthColors = ['', 'bg-blue-50/30', 'bg-purple-50/30', 'bg-teal-50/30', 'bg-orange-50/30'];
+      const dotColors = ['', 'bg-blue-500', 'bg-purple-500', 'bg-teal-500', 'bg-orange-500'];
+      const textColors = ['', 'text-blue-700', 'text-purple-700', 'text-teal-700', 'text-orange-700'];
       const tierLabels = ['', '二次代理店', '三次代理店', '四次代理店', '五次代理店'];
 
       const colorIdx = Math.min(node.depth, 4);
-      const paddingLeft = 10 + (node.depth - 1) * 16; // Increasing indent per depth
+      const paddingLeft = 10 + (node.depth - 1) * 16;
 
-      // 子孫の合計を計算
       const descendantAppts = collectAllAppointments(node.children);
       const nodeTotal = node.stats.total + descendantAppts.length;
 
@@ -245,12 +275,7 @@ export default function AgencyStats() {
           <TableCell>
             <div className="flex items-center gap-2" style={{ paddingLeft: `${paddingLeft}px` }}>
               {hasChildren ? (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-5 w-5 p-0 shrink-0"
-                  onClick={() => toggleExpand(node.org.id)}
-                >
+                <Button variant="ghost" size="sm" className="h-5 w-5 p-0 shrink-0" onClick={() => toggleExpand(node.org.id)}>
                   {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                 </Button>
               ) : (
@@ -290,7 +315,6 @@ export default function AgencyStats() {
         </TableRow>
       );
 
-      // 再帰的に子ノードを描画
       if (hasChildren) {
         rows.push(...renderTreeRows(node.children, isExpanded));
       }
@@ -305,7 +329,7 @@ export default function AgencyStats() {
 
   return (
     <div>
-      <PageHeader title="代理店別アポ集計" description="商談日時ベースで代理店ごとの月次アポイント状況を確認" />
+      <PageHeader title="代理店別集計" description="傘下代理店の月次アポイント状況を確認" />
 
       {/* Month selector & filter */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-6">
@@ -319,18 +343,26 @@ export default function AgencyStats() {
           </Button>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground">企業フィルタ:</span>
-          <Select value={filterOrg} onValueChange={setFilterOrg}>
-            <SelectTrigger className="w-[200px]">
-              <SelectValue placeholder="全企業" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">全企業</SelectItem>
-              {primaryOrgs.map(o => (
-                <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {directChildren.length > 1 && (
+            <>
+              <span className="text-sm text-muted-foreground">企業フィルタ:</span>
+              <Select value={filterOrg} onValueChange={setFilterOrg}>
+                <SelectTrigger className="w-[200px]">
+                  <SelectValue placeholder="全企業" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">全企業</SelectItem>
+                  {directChildren.map(o => (
+                    <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </>
+          )}
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={handleCsvDownload} disabled={appointments.length === 0}>
+            <Download className="w-4 h-4" />
+            CSV
+          </Button>
         </div>
       </div>
 
@@ -338,7 +370,7 @@ export default function AgencyStats() {
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
         <Card className="border shadow-sm">
           <CardContent className="p-4 text-center">
-            <p className="text-xs text-muted-foreground font-medium mb-1">合計</p>
+            <p className="text-xs text-muted-foreground font-medium mb-1">合計（全体）</p>
             <p className="text-2xl font-bold">{totalStats.total}</p>
           </CardContent>
         </Card>
@@ -368,14 +400,31 @@ export default function AgencyStats() {
         </Card>
       </div>
 
+      {/* 自社分サマリー */}
+      {ownStats.total > 0 && (
+        <Card className="border shadow-sm mb-4">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-semibold">自社分</span>
+              <div className="flex items-center gap-3 text-sm">
+                <span>合計: <strong>{ownStats.total}</strong></span>
+                <span className="text-emerald-600">承認: {ownStats.approved}</span>
+                <span className="text-amber-600">保留: {ownStats.pending}</span>
+                <span className="text-red-600">却下: {ownStats.rejected}</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Agency table */}
       <Card className="border shadow-sm">
         <CardHeader className="pb-3">
           <CardTitle className="text-base font-semibold flex items-center gap-2">
             <BarChart3 className="w-4 h-4" />
-            代理店別集計（{monthLabel}）
+            傘下代理店別集計（{monthLabel}）
             <span className="text-xs font-normal text-muted-foreground ml-2">
-              ※ 一次代理店の数値は全子孫企業分を含む合算値です
+              ※ 数値は全子孫企業分を含む合算値です
             </span>
           </CardTitle>
         </CardHeader>
@@ -408,12 +457,7 @@ export default function AgencyStats() {
                       <TableCell>
                         <div className="flex items-center gap-2">
                           {hasDescendants ? (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-6 w-6 p-0 shrink-0"
-                              onClick={() => toggleExpand(agency.org.id)}
-                            >
+                            <Button variant="ghost" size="sm" className="h-6 w-6 p-0 shrink-0" onClick={() => toggleExpand(agency.org.id)}>
                               {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                             </Button>
                           ) : (
@@ -447,10 +491,7 @@ export default function AgencyStats() {
                       <TableCell className="text-center">
                         <div className="flex items-center justify-center gap-1.5">
                           <div className="w-16 h-2 bg-muted rounded-full overflow-hidden">
-                            <div
-                              className="h-full bg-emerald-500 rounded-full transition-all"
-                              style={{ width: `${approvalRate}%` }}
-                            />
+                            <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${approvalRate}%` }} />
                           </div>
                           <span className="text-xs text-muted-foreground w-8">{approvalRate}%</span>
                         </div>
@@ -462,10 +503,8 @@ export default function AgencyStats() {
                       </TableCell>
                     </TableRow>
 
-                    {/* 展開時: 自社分 + 全子孫企業のツリー */}
                     {hasDescendants && isExpanded && (
                       <>
-                        {/* 一次代理店自社分 */}
                         <TableRow key={`${agency.org.id}_own`} className="bg-blue-50/30">
                           <TableCell>
                             <div className="flex items-center gap-2 pl-10">
@@ -482,7 +521,6 @@ export default function AgencyStats() {
                           <TableCell />
                           <TableCell />
                         </TableRow>
-                        {/* 全子孫企業のツリー */}
                         {renderTreeRows(agency.descendantTree, true)}
                       </>
                     )}
@@ -503,7 +541,7 @@ export default function AgencyStats() {
 
       {/* Agency Detail Dialog */}
       <Dialog open={showDetail} onOpenChange={setShowDetail}>
-        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <TrendingUp className="w-5 h-5" />
@@ -512,7 +550,6 @@ export default function AgencyStats() {
           </DialogHeader>
           {selectedAgency && (
             <div>
-              {/* Mini stats (合算) */}
               <div className="grid grid-cols-5 gap-2 mb-4">
                 <div className="text-center p-2 bg-muted/50 rounded-md">
                   <p className="text-xs text-muted-foreground">合計（合算）</p>
@@ -536,12 +573,10 @@ export default function AgencyStats() {
                 </div>
               </div>
 
-              {/* 内訳（子孫企業がある場合） */}
               {selectedAgency.descendantTree.length > 0 && (
                 <DetailBreakdown agency={selectedAgency} />
               )}
 
-              {/* Tabs: 全て / 自社 / 子孫企業別 */}
               <DetailTabs agency={selectedAgency} orgs={orgs} onDetail={openApptDetail} />
             </div>
           )}
@@ -593,12 +628,6 @@ export default function AgencyStats() {
                   <p className="text-muted-foreground">登録日</p>
                   <p className="font-medium">{format(new Date(selectedAppt.created_at), 'yyyy/MM/dd HH:mm')}</p>
                 </div>
-                {(selectedAppt as any).project?.unit_price && (
-                  <div>
-                    <p className="text-muted-foreground">案件単価</p>
-                    <p className="font-medium">¥{Number((selectedAppt as any).project.unit_price).toLocaleString()}</p>
-                  </div>
-                )}
               </div>
               {selectedAppt.notes && (
                 <div className="text-sm border-t pt-3">
@@ -628,7 +657,6 @@ export default function AgencyStats() {
   );
 }
 
-/** 詳細ダイアログの内訳セクション */
 function DetailBreakdown({ agency }: { agency: AgencyMonthlyData }) {
   const flattenTree = (nodes: OrgTreeNode[]): { org: Organization; stats: OrgStats; depth: number }[] => {
     const result: { org: Organization; stats: OrgStats; depth: number }[] = [];
@@ -672,7 +700,6 @@ function DetailBreakdown({ agency }: { agency: AgencyMonthlyData }) {
   );
 }
 
-/** 詳細ダイアログのタブセクション */
 function DetailTabs({ agency, orgs, onDetail }: { agency: AgencyMonthlyData; orgs: Organization[]; onDetail: (a: Appointment) => void }) {
   const flattenTree = (nodes: OrgTreeNode[]): { org: Organization; stats: OrgStats; depth: number }[] => {
     const result: { org: Organization; stats: OrgStats; depth: number }[] = [];
@@ -712,7 +739,6 @@ function DetailTabs({ agency, orgs, onDetail }: { agency: AgencyMonthlyData; org
   );
 }
 
-// 共通のアポイントテーブルコンポーネント
 function AppointmentTable({ appointments, orgs, onDetail }: { appointments: Appointment[]; orgs: Organization[]; onDetail: (a: Appointment) => void }) {
   const getOrgName = (orgId: string) => orgs.find(o => o.id === orgId)?.name || '—';
 

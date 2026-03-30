@@ -25,6 +25,9 @@ import MyAllocations from "./pages/partner/MyAllocations";
 import NewAppointment from "./pages/partner/NewAppointment";
 import PartnerAppointments from "./pages/partner/Appointments";
 import SubPartnerManagement from "./pages/partner/SubPartnerManagement";
+import SettingsPage from "./pages/partner/Settings";
+import PartnerAgencyStats from "./pages/partner/PartnerAgencyStats";
+import PartnerSnsAccounts from "./pages/partner/PartnerSnsAccounts";
 
 // Shared pages
 import Notifications from "./pages/Notifications";
@@ -59,6 +62,7 @@ function AuthenticatedRoutes() {
           <Route path="/sub-allocation-prices" component={SubAllocationPrices} />
           <Route path="/audit-logs" component={AuditLogs} />
           <Route path="/sub-partners" component={SubPartnerManagement} />
+          <Route path="/settings" component={SettingsPage} />
           <Route>
             <Redirect to="/" />
           </Route>
@@ -75,6 +79,9 @@ function AuthenticatedRoutes() {
         <Route path="/appointments/new" component={NewAppointment} />
         <Route path="/appointments" component={PartnerAppointments} />
         <Route path="/sub-partners" component={SubPartnerManagement} />
+        <Route path="/partner-agency-stats" component={PartnerAgencyStats} />
+        <Route path="/sns-accounts" component={PartnerSnsAccounts} />
+        <Route path="/settings" component={SettingsPage} />
         <Route path="/notifications" component={Notifications} />
         <Route>
           <Redirect to="/" />
