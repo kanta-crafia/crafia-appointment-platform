@@ -431,6 +431,12 @@ export default function SnsAccounts() {
     return matchesSearch && matchesOrg;
   });
 
+  // Sales staff filtered by selected org (must be before any early return to satisfy React hooks rules)
+  const staffForSelectedOrg = useMemo(() => {
+    if (!formAssignedOrgId) return allSalesStaff;
+    return allSalesStaff.filter(s => s.org_id === formAssignedOrgId);
+  }, [formAssignedOrgId, allSalesStaff]);
+
   // Stats
   const totalCount = accounts.length;
   const availableCount = accounts.filter(a => a.status === 'available').length;
@@ -444,7 +450,7 @@ export default function SnsAccounts() {
       a.sns_account?.account_name || '',
       a.sns_account?.platform || '',
       a.assigned_org?.name || '',
-      a.allocation?.project ? (a.allocation.project as any).name : '',
+      a.allocation?.project ? (a.allocation.project as any).title : '',
       a.assigned_staff_name || '',
       a.assigned_by_org?.name || '',
       a.notes || '',
@@ -467,12 +473,6 @@ export default function SnsAccounts() {
       </div>
     );
   }
-
-  // Sales staff filtered by selected org
-  const staffForSelectedOrg = useMemo(() => {
-    if (!formAssignedOrgId) return allSalesStaff;
-    return allSalesStaff.filter(s => s.org_id === formAssignedOrgId);
-  }, [formAssignedOrgId, allSalesStaff]);
 
   // Shared form fields component
   const AccountFormFields = ({ isEdit = false }: { isEdit?: boolean }) => (
@@ -921,7 +921,7 @@ export default function SnsAccounts() {
                         <TableCell>
                           {assignment.allocation?.project ? (
                             <Badge variant="outline" className="text-xs">
-                              {(assignment.allocation.project as any).name}
+                              {(assignment.allocation.project as any).title}
                             </Badge>
                           ) : (
                             <span className="text-xs text-muted-foreground">—</span>
@@ -1073,7 +1073,7 @@ export default function SnsAccounts() {
                   <SelectItem value="none">指定なし</SelectItem>
                   {allAllocations.map(alloc => (
                     <SelectItem key={alloc.id} value={alloc.id}>
-                      {(alloc.project as any)?.name || alloc.id}
+                      {(alloc.project as any)?.title || alloc.id}
                     </SelectItem>
                   ))}
                 </SelectContent>

@@ -454,7 +454,7 @@ export default function PartnerSnsAccounts() {
                           <TableCell>
                             {assignment.allocation?.project ? (
                               <Badge variant="outline" className="text-xs">
-                                {(assignment.allocation.project as any).name}
+                                {(assignment.allocation.project as any).title}
                               </Badge>
                             ) : (
                               <span className="text-xs text-muted-foreground">—</span>
@@ -538,7 +538,7 @@ export default function PartnerSnsAccounts() {
                           <TableCell>
                             {assignment.allocation?.project ? (
                               <Badge variant="outline" className="text-xs">
-                                {(assignment.allocation.project as any).name}
+                                {(assignment.allocation.project as any).title}
                               </Badge>
                             ) : (
                               <span className="text-xs text-muted-foreground">—</span>
@@ -623,7 +623,7 @@ export default function PartnerSnsAccounts() {
                   <SelectItem value="none">指定なし</SelectItem>
                   {allocations.map(alloc => (
                     <SelectItem key={alloc.id} value={alloc.id}>
-                      {(alloc.project as any)?.name || alloc.id}
+                      {(alloc.project as any)?.title || alloc.id}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -693,7 +693,7 @@ export default function PartnerSnsAccounts() {
                   <SelectItem value="none">指定なし</SelectItem>
                   {allocations.map(alloc => (
                     <SelectItem key={alloc.id} value={alloc.id}>
-                      {(alloc.project as any)?.name || alloc.id}
+                      {(alloc.project as any)?.title || alloc.id}
                     </SelectItem>
                   ))}
                 </SelectContent>
