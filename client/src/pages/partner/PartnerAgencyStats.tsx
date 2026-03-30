@@ -541,7 +541,7 @@ export default function PartnerAgencyStats() {
 
       {/* Agency Detail Dialog */}
       <Dialog open={showDetail} onOpenChange={setShowDetail}>
-        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-[95vw] w-full max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <TrendingUp className="w-5 h-5" />

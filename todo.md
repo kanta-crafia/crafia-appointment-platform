@@ -428,3 +428,11 @@
 - [x] バージョン定数を3.6.1に更新
 - [x] テスト・検証
 - [x] GitHubプッシュ
+
+## v3.6.2: 代理店別集計の詳細ダイアログ拡大 + React Error #310修正
+- [x] 代理店別集計の詳細ダイアログを大きくする（AgencyStats.tsx）
+- [x] 1次代理店向け代理店別集計の詳細ダイアログも大きくする（PartnerAgencyStats.tsx）
+- [x] AuthProviderエラー修正（ErrorBoundaryをAuthProviderの内側に移動）
+- [x] バージョン定数を3.6.2に更新
+- [x] テスト・検証（103件全パス）
+- [ ] GitHubプッシュ

@@ -8,4 +8,4 @@
  *   - MINOR: 機能追加・改善
  *   - PATCH: バグ修正・軽微な変更
  */
-export const APP_VERSION = "3.6.1";
+export const APP_VERSION = "3.6.2";

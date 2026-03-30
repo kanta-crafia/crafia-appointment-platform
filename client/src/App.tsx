@@ -134,7 +134,6 @@ function AppRouter() {
     );
   }
 
-  // make sure to consider if you need authentication for certain routes
   return (
     <Switch>
       <Route path="/login">
@@ -149,16 +148,16 @@ function AppRouter() {
 
 function App() {
   return (
-    <ErrorBoundary>
-      <ThemeProvider defaultTheme="light">
-        <TooltipProvider>
-          <AuthProvider>
+    <ThemeProvider defaultTheme="light">
+      <TooltipProvider>
+        <AuthProvider>
+          <ErrorBoundary>
             <Toaster />
             <AppRouter />
-          </AuthProvider>
-        </TooltipProvider>
-      </ThemeProvider>
-    </ErrorBoundary>
+          </ErrorBoundary>
+        </AuthProvider>
+      </TooltipProvider>
+    </ThemeProvider>
   );
 }
 
