@@ -128,11 +128,8 @@ export default function SnsAccounts() {
       const adminOrg = (orgsData || []).find(o => !o.parent_org_id);
       if (adminOrg) setAdminOrgId(adminOrg.id);
 
-      // Get first-tier orgs (direct children of Crafia本部) + Crafia本部自身
-      const firstTier = adminOrg
-        ? (orgsData || []).filter(o => o.parent_org_id === adminOrg.id || o.id === adminOrg.id)
-        : (orgsData || []);
-      setFirstTierOrgs(firstTier);
+      // Set all orgs for assignment (Crafia本部 can assign to any org)
+      setFirstTierOrgs(orgsData || []);
 
       // Get all allocations
       const { data: allocData } = await supabase
@@ -1014,11 +1011,26 @@ export default function SnsAccounts() {
                   <SelectValue placeholder="企業を選択" />
                 </SelectTrigger>
                 <SelectContent>
-                  {firstTierOrgs.map(org => (
-                    <SelectItem key={org.id} value={org.id}>
-                      {org.name}{!org.parent_org_id ? '（自社）' : ''}
-                    </SelectItem>
-                  ))}
+                  {firstTierOrgs.map(org => {
+                    const isAdmin = !org.parent_org_id;
+                    const depth = isAdmin ? 0 : (() => {
+                      let d = 0;
+                      let current = org;
+                      while (current.parent_org_id) {
+                        const parent = allOrgs.find(o => o.id === current.parent_org_id);
+                        if (!parent) break;
+                        d++;
+                        current = parent;
+                      }
+                      return d;
+                    })();
+                    const prefix = depth > 0 ? '\u3000'.repeat(depth) + '└ ' : '';
+                    return (
+                      <SelectItem key={org.id} value={org.id}>
+                        {prefix}{org.name}{isAdmin ? '（自社）' : ''}
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
             </div>
@@ -1060,11 +1072,13 @@ export default function SnsAccounts() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">指定なし</SelectItem>
-                  {allAllocations.map(alloc => (
-                    <SelectItem key={alloc.id} value={alloc.id}>
-                      {(alloc.project as any)?.title || alloc.id}
-                    </SelectItem>
-                  ))}
+                  {allAllocations
+                    .filter((alloc, idx, arr) => arr.findIndex(a => a.id === alloc.id) === idx)
+                    .map(alloc => (
+                      <SelectItem key={alloc.id} value={alloc.id}>
+                        {(alloc.project as any)?.title || alloc.id}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
             </div>
