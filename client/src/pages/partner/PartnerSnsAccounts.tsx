@@ -266,6 +266,16 @@ export default function PartnerSnsAccounts() {
     return allSalesStaff.filter(s => s.org_id === editOrgId);
   }, [editOrgId, allSalesStaff]);
 
+  // Open edit dialog for an account's assignment (edit existing or create new)
+  const openAccountEdit = (account: SnsAccount, assignment?: AssignmentWithDetails) => {
+    setAssignAccount(account);
+    setEditAssignment(assignment || null);
+    setEditStaffName(assignment?.assigned_staff_name || '');
+    setEditAllocationId(assignment?.allocation_id || '');
+    setEditNotes(assignment?.notes || '');
+    setShowEditDialog(true);
+  };
+
   // Open assign dialog - assign to child/descendant org
   const openAssign = (account: SnsAccount) => {
     setAssignAccount(account);
@@ -313,18 +323,30 @@ export default function PartnerSnsAccounts() {
   };
 
   const handleEditAssignment = async () => {
-    if (!editAssignment || !userOrgId) return;
+    if (!userOrgId) return;
     setSaving(true);
     try {
-      const { error } = await supabase.from('sns_account_assignments').update({
-        assigned_org_id: editOrgId || editAssignment.assigned_org_id,
+      const updateData = {
         allocation_id: editAllocationId && editAllocationId !== 'none' ? editAllocationId : null,
         assigned_staff_name: editStaffName && editStaffName !== 'none' ? editStaffName : null,
         notes: editNotes || null,
         updated_at: new Date().toISOString(),
-      }).eq('id', editAssignment.id);
-      if (error) throw error;
-      toast.success('割り振りを更新しました');
+      };
+      if (editAssignment) {
+        // Update existing assignment
+        const { error } = await supabase.from('sns_account_assignments').update(updateData).eq('id', editAssignment.id);
+        if (error) throw error;
+      } else if (assignAccount) {
+        // Create new assignment for this account to my org
+        const { error } = await supabase.from('sns_account_assignments').insert({
+          sns_account_id: assignAccount.id,
+          assigned_org_id: userOrgId,
+          assigned_by_org_id: userOrgId,
+          ...updateData,
+        });
+        if (error) throw error;
+      }
+      toast.success('割り振り情報を更新しました');
       setShowEditDialog(false);
       fetchData();
     } catch (e: any) {
@@ -456,7 +478,7 @@ export default function PartnerSnsAccounts() {
                       <TableHead>案件</TableHead>
                       <TableHead>担当者</TableHead>
                       <TableHead>備考</TableHead>
-                      {hasDescendants && <TableHead className="text-right">操作</TableHead>}
+                      <TableHead className="text-right">操作</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -529,17 +551,29 @@ export default function PartnerSnsAccounts() {
                               {assignment.notes || '—'}
                             </span>
                           </TableCell>
-                          {hasDescendants && (
-                            <TableCell className="text-right">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="text-xs"
-                                onClick={() => openAssign(account)}
-                              >
-                                <Share2 className="w-3 h-3 mr-1" />
-                                割り振り
-                              </Button>
+                          {idx === 0 && (
+                            <TableCell rowSpan={assignments.length} className="text-right align-top">
+                              <div className="flex items-center justify-end gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => openAccountEdit(account, assignments[0])}
+                                  title="編集"
+                                >
+                                  <Pencil className="w-3.5 h-3.5" />
+                                </Button>
+                                {hasDescendants && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="text-xs"
+                                    onClick={() => openAssign(account)}
+                                  >
+                                    <Share2 className="w-3 h-3 mr-1" />
+                                    子企業
+                                  </Button>
+                                )}
+                              </div>
                             </TableCell>
                           )}
                         </TableRow>
@@ -547,7 +581,7 @@ export default function PartnerSnsAccounts() {
                     ))}
                     {filteredAccountGroups.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={hasDescendants ? 10 : 9} className="text-center text-muted-foreground py-12">
+                        <TableCell colSpan={10} className="text-center text-muted-foreground py-12">
                           {myAccountGroups.length === 0
                             ? 'まだSNSアカウントが割り振られていません'
                             : '検索条件に一致するアカウントがありません'}
@@ -792,115 +826,94 @@ export default function PartnerSnsAccounts() {
         </DialogContent>
       </Dialog>
 
-      {/* Edit Assignment Dialog */}
+      {/* Edit Account Assignment Dialog */}
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
         <DialogContent className="sm:max-w-[520px]">
           <DialogHeader>
-            <DialogTitle>割り振り編集</DialogTitle>
+            <DialogTitle>アカウント情報編集</DialogTitle>
             <DialogDescription>
-              「{editAssignment?.sns_account?.account_name}」の割り振り情報を編集します
+              「{assignAccount?.account_name || editAssignment?.sns_account?.account_name}」の割り振り情報を編集します
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label>割り振り先企業</Label>
-              <Select value={editOrgId} onValueChange={(v) => {
-                setEditOrgId(v);
-                setEditStaffName('');
-              }}>
-                <SelectTrigger>
-                  <SelectValue placeholder="企業を選択" />
-                </SelectTrigger>
-                <SelectContent>
-                  {(() => {
-                    const result: { id: string; name: string; depth: number; parentName?: string }[] = [];
-                    const addChildren = (parentId: string, depth: number) => {
-                      const children = descendantOrgs.filter(o => o.parent_org_id === parentId);
-                      for (const child of children) {
-                        const parent = descendantOrgs.find(o => o.id === parentId) || (parentId === userOrgId ? { name: '自社' } : null);
-                        result.push({ id: child.id, name: child.name, depth, parentName: parent?.name });
-                        addChildren(child.id, depth + 1);
-                      }
-                    };
-                    addChildren(userOrgId!, 0);
-                    return result.map(o => (
-                      <SelectItem key={o.id} value={o.id}>
-                        {'\u00A0\u00A0'.repeat(o.depth)}{o.depth > 0 ? '└ ' : ''}{o.name}
-                        {o.parentName ? ` (${o.parentName})` : ''}
-                      </SelectItem>
-                    ));
-                  })()}
-                </SelectContent>
-              </Select>
-            </div>
-            {editOrgId && staffForEditOrg.length > 0 && (
+            <div className="border rounded-lg p-3 space-y-3 bg-blue-50/50 dark:bg-blue-950/20">
+              <p className="text-xs font-medium text-blue-700 dark:text-blue-400 flex items-center gap-1">
+                <Share2 className="w-3.5 h-3.5" />
+                割り振り情報
+              </p>
               <div className="space-y-2">
                 <Label>営業担当者（任意）</Label>
-                <Select value={editStaffName || 'none'} onValueChange={(v) => setEditStaffName(v === 'none' ? '' : v)}>
+                {(() => {
+                  const myStaff = allSalesStaff.filter(s => s.org_id === userOrgId);
+                  if (myStaff.length > 0) {
+                    return (
+                      <Select value={editStaffName || 'none'} onValueChange={(v) => setEditStaffName(v === 'none' ? '' : v)}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="担当者を選択（任意）" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">指定なし</SelectItem>
+                          {myStaff.map(staff => (
+                            <SelectItem key={staff.id} value={staff.name}>{staff.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    );
+                  }
+                  return (
+                    <>
+                      <Select value="none" disabled>
+                        <SelectTrigger className="opacity-60">
+                          <SelectValue placeholder="営業担当者が未登録です" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">営業担当者が未登録です</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">企業管理から営業担当者を追加してください。</p>
+                    </>
+                  );
+                })()}
+              </div>
+              <div className="space-y-2">
+                <Label>案件（任意）</Label>
+                <Select value={editAllocationId || 'none'} onValueChange={(v) => setEditAllocationId(v === 'none' ? '' : v)}>
                   <SelectTrigger>
-                    <SelectValue placeholder="担当者を選択（任意）" />
+                    <SelectValue placeholder="案件を選択（任意）" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">指定なし</SelectItem>
-                    {staffForEditOrg.map(staff => (
-                      <SelectItem key={staff.id} value={staff.name}>{staff.name}</SelectItem>
-                    ))}
+                    {(() => {
+                      const seenProjectIds = new Set<string>();
+                      return allocations
+                        .filter(alloc => {
+                          const pid = alloc.project_id;
+                          if (seenProjectIds.has(pid)) return false;
+                          seenProjectIds.add(pid);
+                          return true;
+                        })
+                        .map(alloc => {
+                          const proj = alloc.project as any;
+                          const projectNumber = proj?.project_number ? `[${proj.project_number}] ` : '';
+                          return (
+                            <SelectItem key={alloc.id} value={alloc.id}>
+                              {projectNumber}{proj?.title || alloc.id}
+                            </SelectItem>
+                          );
+                        });
+                    })()}
                   </SelectContent>
                 </Select>
               </div>
-            )}
-            {editOrgId && staffForEditOrg.length === 0 && (
               <div className="space-y-2">
-                <Label>営業担当者（任意）</Label>
-                <Select value="none" disabled>
-                  <SelectTrigger className="opacity-60">
-                    <SelectValue placeholder="営業担当者が未登録です" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">営業担当者が未登録です</SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">この企業には営業担当者が登録されていません。企業管理から営業担当者を追加してください。</p>
+                <Label>備考</Label>
+                <Textarea
+                  placeholder="メモや注意事項など"
+                  value={editNotes}
+                  onChange={(e) => setEditNotes(e.target.value)}
+                  rows={2}
+                />
               </div>
-            )}
-            <div className="space-y-2">
-              <Label>案件（任意）</Label>
-              <Select value={editAllocationId || 'none'} onValueChange={(v) => setEditAllocationId(v === 'none' ? '' : v)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="案件を選択（任意）" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">指定なし</SelectItem>
-                  {(() => {
-                    const seenProjectIds = new Set<string>();
-                    return allocations
-                      .filter(alloc => {
-                        const pid = alloc.project_id;
-                        if (seenProjectIds.has(pid)) return false;
-                        seenProjectIds.add(pid);
-                        return true;
-                      })
-                      .map(alloc => {
-                        const proj = alloc.project as any;
-                        const projectNumber = proj?.project_number ? `[${proj.project_number}] ` : '';
-                        return (
-                          <SelectItem key={alloc.id} value={alloc.id}>
-                            {projectNumber}{proj?.title || alloc.id}
-                          </SelectItem>
-                        );
-                      });
-                  })()}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>備考</Label>
-              <Textarea
-                placeholder="メモや注意事項など"
-                value={editNotes}
-                onChange={(e) => setEditNotes(e.target.value)}
-                rows={2}
-              />
             </div>
           </div>
           <DialogFooter>

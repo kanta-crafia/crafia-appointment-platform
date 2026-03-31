@@ -279,6 +279,19 @@ export default function SnsAccounts() {
     }
   };
 
+  // Edit form assignment states
+  const [formAssignOrgId, setFormAssignOrgId] = useState('');
+  const [formAssignStaffName, setFormAssignStaffName] = useState('');
+  const [formAssignAllocationId, setFormAssignAllocationId] = useState('');
+  const [formAssignNotes, setFormAssignNotes] = useState('');
+  const [existingAssignmentId, setExistingAssignmentId] = useState<string | null>(null);
+
+  // Sales staff for edit form org selection
+  const staffForFormOrg = useMemo(() => {
+    if (!formAssignOrgId) return [];
+    return allSalesStaff.filter(s => s.org_id === formAssignOrgId);
+  }, [formAssignOrgId, allSalesStaff]);
+
   // === Edit ===
   const openEdit = (account: SnsAccount) => {
     setEditAccount(account);
@@ -291,6 +304,23 @@ export default function SnsAccounts() {
     setFormChatPassword(account.chat_password || '');
     setFormNotes(account.notes || '');
     setFormStatus(account.status);
+
+    // Load existing assignment for this account
+    const existingAssignment = allAssignments.find(a => a.sns_account_id === account.id);
+    if (existingAssignment) {
+      setExistingAssignmentId(existingAssignment.id);
+      setFormAssignOrgId(existingAssignment.assigned_org_id || '');
+      setFormAssignStaffName(existingAssignment.assigned_staff_name || '');
+      setFormAssignAllocationId(existingAssignment.allocation_id || '');
+      setFormAssignNotes(existingAssignment.notes || '');
+    } else {
+      setExistingAssignmentId(null);
+      setFormAssignOrgId('');
+      setFormAssignStaffName('');
+      setFormAssignAllocationId('');
+      setFormAssignNotes('');
+    }
+
     setShowEditDialog(true);
   };
 
@@ -302,6 +332,7 @@ export default function SnsAccounts() {
     }
     setSaving(true);
     try {
+      // Update account info
       const { error } = await supabase.from('sns_accounts').update({
         platform: formPlatform,
         gmail_address: formGmailAddress || null,
@@ -311,14 +342,46 @@ export default function SnsAccounts() {
         login_password: formLoginPassword,
         chat_password: formChatPassword || null,
         notes: formNotes || null,
-        status: formStatus,
+        status: formAssignOrgId ? 'assigned' : formStatus,
         updated_at: new Date().toISOString(),
       }).eq('id', editAccount.id);
       if (error) throw error;
+
+      // Handle assignment (upsert)
+      if (formAssignOrgId) {
+        const assignmentData = {
+          sns_account_id: editAccount.id,
+          assigned_org_id: formAssignOrgId,
+          allocation_id: formAssignAllocationId && formAssignAllocationId !== 'none' ? formAssignAllocationId : null,
+          assigned_by_org_id: adminOrgId || formAssignOrgId,
+          assigned_staff_name: formAssignStaffName && formAssignStaffName !== 'none' ? formAssignStaffName : null,
+          notes: formAssignNotes || null,
+          updated_at: new Date().toISOString(),
+        };
+        if (existingAssignmentId) {
+          // Update existing assignment
+          const { error: assignError } = await supabase.from('sns_account_assignments')
+            .update(assignmentData)
+            .eq('id', existingAssignmentId);
+          if (assignError) throw assignError;
+        } else {
+          // Create new assignment
+          const { error: assignError } = await supabase.from('sns_account_assignments')
+            .insert(assignmentData);
+          if (assignError) throw assignError;
+        }
+      } else if (existingAssignmentId) {
+        // Remove assignment if org was cleared
+        const { error: delError } = await supabase.from('sns_account_assignments')
+          .delete().eq('id', existingAssignmentId);
+        if (delError) throw delError;
+      }
+
       toast.success('アカウント情報を更新しました');
       setShowEditDialog(false);
       setEditAccount(null);
       fetchAccounts();
+      fetchAssignments();
     } catch (e: any) {
       toast.error('更新に失敗しました', { description: e.message });
     } finally {
@@ -800,16 +863,6 @@ export default function SnsAccounts() {
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-1">
                             <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => openAssign(account)}
-                              title="割り振り"
-                              className="text-xs"
-                            >
-                              <Share2 className="w-3.5 h-3.5 mr-1" />
-                              割り振り
-                            </Button>
-                            <Button
                               variant="ghost"
                               size="sm"
                               onClick={() => openEdit(account)}
@@ -1009,12 +1062,128 @@ export default function SnsAccounts() {
 
       {/* === Edit Dialog === */}
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-        <DialogContent className="sm:max-w-[520px] max-h-[85vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-[560px] max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>アカウント編集</DialogTitle>
-            <DialogDescription>アカウント情報を編集します</DialogDescription>
+            <DialogDescription>アカウント情報と割り振りを編集します</DialogDescription>
           </DialogHeader>
           <AccountFormFields isEdit />
+
+          {/* 割り振り情報セクション */}
+          <div className="border rounded-lg p-3 space-y-3 bg-blue-50/50 dark:bg-blue-950/20">
+            <p className="text-xs font-medium text-blue-700 dark:text-blue-400 flex items-center gap-1">
+              <Share2 className="w-3.5 h-3.5" />
+              割り振り情報
+            </p>
+            <div className="space-y-2">
+              <Label>割り振り先企業</Label>
+              <Select value={formAssignOrgId || 'none'} onValueChange={(v) => {
+                setFormAssignOrgId(v === 'none' ? '' : v);
+                setFormAssignStaffName('');
+              }}>
+                <SelectTrigger>
+                  <SelectValue placeholder="企業を選択" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">指定なし</SelectItem>
+                  {(() => {
+                    const topLevel = allOrgs.filter(o => !o.parent_org_id);
+                    const result: { id: string; name: string; depth: number; parentName?: string }[] = [];
+                    const addChildren = (parentId: string, depth: number) => {
+                      const children = allOrgs.filter(o => o.parent_org_id === parentId);
+                      for (const child of children) {
+                        const parent = allOrgs.find(o => o.id === parentId);
+                        result.push({ id: child.id, name: child.name, depth, parentName: parent?.name });
+                        addChildren(child.id, depth + 1);
+                      }
+                    };
+                    for (const top of topLevel) {
+                      result.push({ id: top.id, name: top.name, depth: 0 });
+                      addChildren(top.id, 1);
+                    }
+                    return result.map(o => (
+                      <SelectItem key={o.id} value={o.id}>
+                        {'\u00A0\u00A0'.repeat(o.depth)}{o.depth > 0 ? '└ ' : ''}{o.name}
+                        {o.parentName ? ` (${o.parentName})` : '（自社）'}
+                      </SelectItem>
+                    ));
+                  })()}
+                </SelectContent>
+              </Select>
+            </div>
+            {formAssignOrgId && (
+              <div className="space-y-2">
+                <Label>営業担当者（任意）</Label>
+                {staffForFormOrg.length > 0 ? (
+                  <Select value={formAssignStaffName || 'none'} onValueChange={(v) => setFormAssignStaffName(v === 'none' ? '' : v)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="担当者を選択（任意）" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">指定なし</SelectItem>
+                      {staffForFormOrg.map(staff => (
+                        <SelectItem key={staff.id} value={staff.name}>
+                          {staff.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <>
+                    <Select value="none" disabled>
+                      <SelectTrigger className="opacity-60">
+                        <SelectValue placeholder="営業担当者が未登録です" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">営業担当者が未登録です</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">この企業には営業担当者が登録されていません。企業管理から追加してください。</p>
+                  </>
+                )}
+              </div>
+            )}
+            <div className="space-y-2">
+              <Label>案件（任意）</Label>
+              <Select value={formAssignAllocationId || 'none'} onValueChange={(v) => setFormAssignAllocationId(v === 'none' ? '' : v)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="案件を選択（任意）" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">指定なし</SelectItem>
+                  {(() => {
+                    const seenProjectIds = new Set<string>();
+                    return allAllocations
+                      .filter(alloc => {
+                        const pid = alloc.project_id;
+                        if (seenProjectIds.has(pid)) return false;
+                        seenProjectIds.add(pid);
+                        return true;
+                      })
+                      .map(alloc => {
+                        const proj = alloc.project as any;
+                        const projectNumber = proj?.project_number ? `[${proj.project_number}] ` : '';
+                        return (
+                          <SelectItem key={alloc.id} value={alloc.id}>
+                            {projectNumber}{proj?.title || alloc.id}
+                          </SelectItem>
+                        );
+                      });
+                  })()}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>割り振り備考</Label>
+              <Textarea
+                placeholder="割り振りに関するメモ"
+                value={formAssignNotes}
+                onChange={(e) => setFormAssignNotes(e.target.value)}
+                rows={2}
+              />
+            </div>
+          </div>
+
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowEditDialog(false)}>
               キャンセル
