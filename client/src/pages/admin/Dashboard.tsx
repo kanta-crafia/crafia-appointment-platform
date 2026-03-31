@@ -3,6 +3,7 @@ import { supabase, type Project, type Appointment } from '@/lib/supabase';
 import { PageHeader } from '@/components/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Briefcase, ClipboardCheck, Building2, Clock } from 'lucide-react';
+import { format } from 'date-fns';
 
 interface DashboardStats {
   totalProjects: number;
@@ -32,7 +33,7 @@ export default function AdminDashboard() {
         supabase.from('organizations').select('*', { count: 'exact', head: true }),
         supabase.from('appointments').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
         supabase.from('appointments').select('*', { count: 'exact', head: true }).eq('status', 'approved'),
-        supabase.from('appointments').select('*, project:projects(title), organization:organizations(name)').order('created_at', { ascending: false }).limit(5),
+        supabase.from('appointments').select('*, project:projects(title, project_number), organization:organizations(name)').order('meeting_datetime', { ascending: false }).limit(5),
       ]);
 
       setProjects(projRes.data || []);
@@ -138,7 +139,7 @@ export default function AdminDashboard() {
         {/* Recent appointments */}
         <Card className="border shadow-sm">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base font-semibold">最近のアポイント</CardTitle>
+            <CardTitle className="text-base font-semibold">直近のアポイント（商談日時順）</CardTitle>
           </CardHeader>
           <CardContent>
             {recentAppts.length === 0 ? (
@@ -149,7 +150,12 @@ export default function AdminDashboard() {
                   <div key={a.id} className="flex items-center justify-between py-1.5">
                     <div className="min-w-0">
                       <p className="text-sm font-medium truncate">{a.target_company_name}</p>
-                      <p className="text-xs text-muted-foreground">{(a as any).project?.title} · {(a as any).organization?.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {(a as any).project?.project_number ? `[${(a as any).project.project_number}] ` : ''}{(a as any).project?.title} · {(a as any).organization?.name}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        商談: {format(new Date(a.meeting_datetime), 'yyyy/MM/dd HH:mm')}
+                      </p>
                     </div>
                     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${
                       a.status === 'pending' ? 'bg-amber-100 text-amber-800 border-amber-200' :

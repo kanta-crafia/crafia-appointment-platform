@@ -82,7 +82,7 @@ export default function PartnerAppointments() {
         .from('appointments')
         .select('*, project:projects(title, project_number), organization:organizations(name)')
         .in('org_id', allOrgIds)
-        .order('created_at', { ascending: false });
+        .order('meeting_datetime', { ascending: false });
       setAppointments(data || []);
     } catch (e) {
       console.error('Appointments fetch error:', e);

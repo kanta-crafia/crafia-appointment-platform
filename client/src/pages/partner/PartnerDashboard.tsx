@@ -81,7 +81,8 @@ export default function PartnerDashboard() {
       const { data: apptData } = await supabase
         .from('appointments')
         .select('*')
-        .eq('org_id', userOrgId);
+        .eq('org_id', userOrgId)
+        .order('meeting_datetime', { ascending: false });
 
       setAllocations(allAllocs);
       setAppointments(apptData || []);

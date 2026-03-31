@@ -10,9 +10,10 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { CheckCircle, XCircle, Ban, Pencil, Download, AlertTriangle, Clock } from 'lucide-react';
+import { CheckCircle, XCircle, Ban, Pencil, Download, AlertTriangle, Clock, ChevronLeft, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
-import { format, isToday, isTomorrow } from 'date-fns';
+import { format, addMonths, subMonths, isSameMonth, isToday, isTomorrow } from 'date-fns';
+import { ja } from 'date-fns/locale';
 import { Input } from '@/components/ui/input';
 
 export default function Approvals() {
@@ -31,6 +32,7 @@ export default function Approvals() {
   const [editMeetingDatetime, setEditMeetingDatetime] = useState('');
   const [editNotes, setEditNotes] = useState('');
   const [saving, setSaving] = useState(false);
+  const [selectedMonth, setSelectedMonth] = useState(() => new Date());
 
   const fetchAppointments = useCallback(async () => {
     setLoading(true);
@@ -38,7 +40,7 @@ export default function Approvals() {
       const { data } = await supabase
         .from('appointments')
         .select('*, project:projects(title, project_number), organization:organizations(name), creator:users!appointments_created_by_user_id_fkey(full_name, email)')
-        .order('created_at', { ascending: false });
+        .order('meeting_datetime', { ascending: false });
       setAppointments(data || []);
     } catch (e) {
       console.error('Approvals fetch error:', e);
@@ -49,10 +51,33 @@ export default function Approvals() {
 
   useEffect(() => { fetchAppointments(); }, [fetchAppointments]);
 
-  const filtered = appointments.filter(a => {
-    if (tab === 'all') return true;
-    return a.status === tab;
-  });
+  // 月別フィルター: 商談日時(meeting_datetime)を基準に絞り込み
+  const monthFiltered = useMemo(() => {
+    return appointments.filter(a => {
+      const meetingDate = new Date(a.meeting_datetime);
+      return isSameMonth(meetingDate, selectedMonth);
+    });
+  }, [appointments, selectedMonth]);
+
+  // ステータスフィルター: 月別フィルター後に適用
+  const filtered = useMemo(() => {
+    if (tab === 'all') return monthFiltered;
+    return monthFiltered.filter(a => a.status === tab);
+  }, [monthFiltered, tab]);
+
+  // 月別のステータス別件数
+  const statusCounts = useMemo(() => ({
+    all: monthFiltered.length,
+    pending: monthFiltered.filter(a => a.status === 'pending').length,
+    approved: monthFiltered.filter(a => a.status === 'approved').length,
+    rejected: monthFiltered.filter(a => a.status === 'rejected').length,
+    cancelled: monthFiltered.filter(a => a.status === 'cancelled').length,
+  }), [monthFiltered]);
+
+  const goToPrevMonth = () => setSelectedMonth(prev => subMonths(prev, 1));
+  const goToNextMonth = () => setSelectedMonth(prev => addMonths(prev, 1));
+  const goToCurrentMonth = () => setSelectedMonth(new Date());
+  const isCurrentMonth = isSameMonth(selectedMonth, new Date());
 
   const statusLabel = (s: string) => {
     switch (s) {
@@ -99,8 +124,9 @@ export default function Approvals() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
+    const monthStr = format(selectedMonth, 'yyyyMM');
     const tabLabel = tab === 'all' ? '全て' : statusLabel(tab);
-    a.download = `アポイント一覧_${tabLabel}_${format(new Date(), 'yyyyMMdd')}.csv`;
+    a.download = `アポイント一覧_${tabLabel}_${monthStr}.csv`;
     a.click();
     URL.revokeObjectURL(url);
     toast.success('CSVをダウンロードしました');
@@ -260,9 +286,7 @@ export default function Approvals() {
     setShowDetail(true);
   };
 
-  const pendingCount = appointments.filter(a => a.status === 'pending').length;
-
-  // 当日・翌日のアポ（全アポから抽出）
+  // 当日・翌日のアポ（全アポから抽出、月に関係なく表示）
   const todayAppointments = useMemo(() => {
     return appointments.filter(a => {
       const meetingDate = new Date(a.meeting_datetime);
@@ -285,10 +309,35 @@ export default function Approvals() {
     <div>
       <div className="flex items-center justify-between">
         <PageHeader title="アポ一覧" description="アポイントの確認・承認・却下・取消" />
-        <Button variant="outline" size="sm" className="gap-1.5" onClick={handleCsvDownload} disabled={filtered.length === 0}>
-          <Download className="w-4 h-4" />
-          CSVダウンロード
-        </Button>
+      </div>
+
+      {/* 月選択UI */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="icon" className="h-8 w-8" onClick={goToPrevMonth}>
+            <ChevronLeft className="w-4 h-4" />
+          </Button>
+          <span className="text-lg font-semibold min-w-[140px] text-center">
+            {format(selectedMonth, 'yyyy年M月', { locale: ja })}
+          </span>
+          <Button variant="outline" size="icon" className="h-8 w-8" onClick={goToNextMonth}>
+            <ChevronRight className="w-4 h-4" />
+          </Button>
+          {!isCurrentMonth && (
+            <Button variant="ghost" size="sm" className="text-xs ml-2" onClick={goToCurrentMonth}>
+              今月に戻る
+            </Button>
+          )}
+        </div>
+        <div className="flex items-center gap-3">
+          <p className="text-sm text-muted-foreground">
+            {format(selectedMonth, 'M月', { locale: ja })}のアポ: <span className="font-semibold text-foreground">{statusCounts.all}件</span>
+          </p>
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={handleCsvDownload} disabled={filtered.length === 0}>
+            <Download className="w-4 h-4" />
+            CSV
+          </Button>
+        </div>
       </div>
 
       {/* 当日・翌日アポリマインド */}
@@ -383,12 +432,12 @@ export default function Approvals() {
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
           <TabsTrigger value="pending">
-            保留中 {pendingCount > 0 && <span className="ml-1.5 bg-amber-500 text-white text-xs rounded-full px-1.5 py-0.5">{pendingCount}</span>}
+            保留中 ({statusCounts.pending})
           </TabsTrigger>
-          <TabsTrigger value="approved">承認済</TabsTrigger>
-          <TabsTrigger value="rejected">却下</TabsTrigger>
-          <TabsTrigger value="cancelled">取消</TabsTrigger>
-          <TabsTrigger value="all">全て</TabsTrigger>
+          <TabsTrigger value="approved">承認済 ({statusCounts.approved})</TabsTrigger>
+          <TabsTrigger value="rejected">却下 ({statusCounts.rejected})</TabsTrigger>
+          <TabsTrigger value="cancelled">取消 ({statusCounts.cancelled})</TabsTrigger>
+          <TabsTrigger value="all">全て ({statusCounts.all})</TabsTrigger>
         </TabsList>
 
         <TabsContent value={tab} className="mt-4">
@@ -425,7 +474,9 @@ export default function Approvals() {
                     </TableRow>
                   ))}
                   {filtered.length === 0 && (
-                    <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">該当するアポイントがありません</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                      {format(selectedMonth, 'yyyy年M月', { locale: ja })}の該当するアポイントがありません
+                    </TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>
