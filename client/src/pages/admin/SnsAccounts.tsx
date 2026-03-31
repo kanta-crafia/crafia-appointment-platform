@@ -80,6 +80,14 @@ export default function SnsAccounts() {
   const [assignNotes, setAssignNotes] = useState('');
   const [adminOrgId, setAdminOrgId] = useState<string | null>(null);
 
+  // Edit assignment dialog
+  const [showEditAssignDialog, setShowEditAssignDialog] = useState(false);
+  const [editAssignment, setEditAssignment] = useState<AssignmentWithDetails | null>(null);
+  const [editAssignOrgId, setEditAssignOrgId] = useState('');
+  const [editAssignAllocationId, setEditAssignAllocationId] = useState('');
+  const [editAssignStaffName, setEditAssignStaffName] = useState('');
+  const [editAssignNotes, setEditAssignNotes] = useState('');
+
   // Password visibility
   const [visiblePasswords, setVisiblePasswords] = useState<Set<string>>(new Set());
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -378,6 +386,39 @@ export default function SnsAccounts() {
     }
   };
 
+  // === Edit Assignment ===
+  const openEditAssignment = (assignment: AssignmentWithDetails) => {
+    setEditAssignment(assignment);
+    setEditAssignOrgId(assignment.assigned_org_id);
+    setEditAssignAllocationId(assignment.allocation_id || '');
+    setEditAssignStaffName(assignment.assigned_staff_name || '');
+    setEditAssignNotes(assignment.notes || '');
+    setShowEditAssignDialog(true);
+  };
+
+  const handleEditAssignment = async () => {
+    if (!editAssignment) return;
+    setSaving(true);
+    try {
+      const { error } = await supabase.from('sns_account_assignments').update({
+        assigned_org_id: editAssignOrgId || editAssignment.assigned_org_id,
+        allocation_id: editAssignAllocationId && editAssignAllocationId !== 'none' ? editAssignAllocationId : null,
+        assigned_staff_name: editAssignStaffName && editAssignStaffName !== 'none' ? editAssignStaffName : null,
+        notes: editAssignNotes || null,
+        updated_at: new Date().toISOString(),
+      }).eq('id', editAssignment.id);
+      if (error) throw error;
+      toast.success('割り振りを更新しました');
+      setShowEditAssignDialog(false);
+      setEditAssignment(null);
+      fetchAssignments();
+    } catch (e: any) {
+      toast.error('更新に失敗しました', { description: e.message });
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleDeleteAssignment = async (assignmentId: string) => {
     if (!confirm('この割り振りを削除しますか？')) return;
     try {
@@ -416,6 +457,12 @@ export default function SnsAccounts() {
     if (!assignOrgId) return [];
     return allSalesStaff.filter(s => s.org_id === assignOrgId);
   }, [assignOrgId, allSalesStaff]);
+
+  // Sales staff filtered by edit assignment dialog org selection
+  const staffForEditAssignOrg = useMemo(() => {
+    if (!editAssignOrgId) return [];
+    return allSalesStaff.filter(s => s.org_id === editAssignOrgId);
+  }, [editAssignOrgId, allSalesStaff]);
 
   // Stats
   const totalCount = accounts.length;
@@ -904,15 +951,25 @@ export default function SnsAccounts() {
                           </span>
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDeleteAssignment(assignment.id)}
-                            title="削除"
-                            className="text-destructive hover:text-destructive"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </Button>
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => openEditAssignment(assignment)}
+                              title="編集"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDeleteAssignment(assignment.id)}
+                              title="削除"
+                              className="text-destructive hover:text-destructive"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -1059,12 +1116,15 @@ export default function SnsAccounts() {
             {assignOrgId && staffForAssignOrg.length === 0 && (
               <div className="space-y-2">
                 <Label>営業担当者（任意）</Label>
-                <Input
-                  placeholder="担当者名を入力（任意）"
-                  value={assignStaffName}
-                  onChange={(e) => setAssignStaffName(e.target.value)}
-                />
-                <p className="text-xs text-muted-foreground">この企業には営業担当者が登録されていません。手動で入力できます。</p>
+                <Select value="none" disabled>
+                  <SelectTrigger className="opacity-60">
+                    <SelectValue placeholder="営業担当者が未登録です" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">営業担当者が未登録です</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">この企業には営業担当者が登録されていません。企業管理から営業担当者を追加してください。</p>
               </div>
             )}
             <div className="space-y-2">
@@ -1112,6 +1172,132 @@ export default function SnsAccounts() {
             <Button variant="outline" onClick={() => setShowAssignDialog(false)}>キャンセル</Button>
             <Button onClick={handleAssign} disabled={saving || !assignOrgId}>
               {saving ? '割り振り中...' : '割り振り'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* === Edit Assignment Dialog === */}
+      <Dialog open={showEditAssignDialog} onOpenChange={setShowEditAssignDialog}>
+        <DialogContent className="sm:max-w-[520px]">
+          <DialogHeader>
+            <DialogTitle>割り振り編集</DialogTitle>
+            <DialogDescription>
+              「{editAssignment?.sns_account?.account_name || editAssignment?.sns_account_id}」の割り振り情報を編集します
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>割り振り先企業 <span className="text-destructive">*</span></Label>
+              <Select value={editAssignOrgId} onValueChange={(v) => {
+                setEditAssignOrgId(v);
+                setEditAssignStaffName('');
+              }}>
+                <SelectTrigger>
+                  <SelectValue placeholder="企業を選択" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(() => {
+                    const topLevel = allOrgs.filter(o => !o.parent_org_id);
+                    const result: { id: string; name: string; depth: number; parentName?: string }[] = [];
+                    const addChildren = (parentId: string, depth: number) => {
+                      const children = allOrgs.filter(o => o.parent_org_id === parentId);
+                      for (const child of children) {
+                        const parent = allOrgs.find(o => o.id === parentId);
+                        result.push({ id: child.id, name: child.name, depth, parentName: parent?.name });
+                        addChildren(child.id, depth + 1);
+                      }
+                    };
+                    for (const top of topLevel) {
+                      result.push({ id: top.id, name: top.name, depth: 0 });
+                      addChildren(top.id, 1);
+                    }
+                    return result.map(o => (
+                      <SelectItem key={o.id} value={o.id}>
+                        {'\u00A0\u00A0'.repeat(o.depth)}{o.depth > 0 ? '└ ' : ''}{o.name}
+                        {o.parentName ? ` (${o.parentName})` : '（自社）'}
+                      </SelectItem>
+                    ));
+                  })()}
+                </SelectContent>
+              </Select>
+            </div>
+            {editAssignOrgId && (
+              <div className="space-y-2">
+                <Label>営業担当者（任意）</Label>
+                {staffForEditAssignOrg.length > 0 ? (
+                  <Select value={editAssignStaffName || 'none'} onValueChange={(v) => setEditAssignStaffName(v === 'none' ? '' : v)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="担当者を選択（任意）" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">指定なし</SelectItem>
+                      {staffForEditAssignOrg.map(staff => (
+                        <SelectItem key={staff.id} value={staff.name}>
+                          {staff.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <>
+                    <Select value="none" disabled>
+                      <SelectTrigger className="opacity-60">
+                        <SelectValue placeholder="営業担当者が未登録です" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">営業担当者が未登録です</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">この企業には営業担当者が登録されていません。企業管理から営業担当者を追加してください。</p>
+                  </>
+                )}
+              </div>
+            )}
+            <div className="space-y-2">
+              <Label>案件（任意）</Label>
+              <Select value={editAssignAllocationId || 'none'} onValueChange={(v) => setEditAssignAllocationId(v === 'none' ? '' : v)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="案件を選択（任意）" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">指定なし</SelectItem>
+                  {(() => {
+                    const seenProjectIds = new Set<string>();
+                    return allAllocations
+                      .filter(alloc => {
+                        const pid = alloc.project_id;
+                        if (seenProjectIds.has(pid)) return false;
+                        seenProjectIds.add(pid);
+                        return true;
+                      })
+                      .map(alloc => {
+                        const proj = alloc.project as any;
+                        const projectNumber = proj?.project_number ? `[${proj.project_number}] ` : '';
+                        return (
+                          <SelectItem key={alloc.id} value={alloc.id}>
+                            {projectNumber}{proj?.title || alloc.id}
+                          </SelectItem>
+                        );
+                      });
+                  })()}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>備考</Label>
+              <Textarea
+                placeholder="メモや注意事項など"
+                value={editAssignNotes}
+                onChange={(e) => setEditAssignNotes(e.target.value)}
+                rows={2}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEditAssignDialog(false)}>キャンセル</Button>
+            <Button onClick={handleEditAssignment} disabled={saving || !editAssignOrgId}>
+              {saving ? '更新中...' : '更新'}
             </Button>
           </DialogFooter>
         </DialogContent>

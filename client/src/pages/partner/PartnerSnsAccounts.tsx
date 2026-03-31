@@ -732,12 +732,15 @@ export default function PartnerSnsAccounts() {
             {assignOrgId && staffForAssignOrg.length === 0 && (
               <div className="space-y-2">
                 <Label>営業担当者（任意）</Label>
-                <Input
-                  placeholder="担当者名を入力（任意）"
-                  value={assignStaffName}
-                  onChange={(e) => setAssignStaffName(e.target.value)}
-                />
-                <p className="text-xs text-muted-foreground">この企業には営業担当者が登録されていません</p>
+                <Select value="none" disabled>
+                  <SelectTrigger className="opacity-60">
+                    <SelectValue placeholder="営業担当者が未登録です" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">営業担当者が未登録です</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">この企業には営業担当者が登録されていません。企業管理から営業担当者を追加してください。</p>
               </div>
             )}
             <div className="space-y-2">
@@ -849,12 +852,15 @@ export default function PartnerSnsAccounts() {
             {editOrgId && staffForEditOrg.length === 0 && (
               <div className="space-y-2">
                 <Label>営業担当者（任意）</Label>
-                <Input
-                  placeholder="担当者名を入力（任意）"
-                  value={editStaffName}
-                  onChange={(e) => setEditStaffName(e.target.value)}
-                />
-                <p className="text-xs text-muted-foreground">この企業には営業担当者が登録されていません</p>
+                <Select value="none" disabled>
+                  <SelectTrigger className="opacity-60">
+                    <SelectValue placeholder="営業担当者が未登録です" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">営業担当者が未登録です</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">この企業には営業担当者が登録されていません。企業管理から営業担当者を追加してください。</p>
               </div>
             )}
             <div className="space-y-2">
