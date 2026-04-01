@@ -17,6 +17,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { format, addMonths, subMonths, isSameMonth, isToday, isTomorrow } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import { toast } from 'sonner';
+import { getChannelLabel, getCompanyTypeLabel } from '@/lib/channelLabels';
 
 // UTCのtimestamp文字列をdatetime-local用のローカル形式に変換
 function toLocalDatetimeString(utcString: string): string {
@@ -341,17 +342,11 @@ export default function PartnerAppointments() {
   const handleCsvDownload = () => {
     const headers = [
       '案件番号', '案件名', '先方企業名', '先方担当者名',
-      '獲得日', '獲得者名', '獲得時の名乗り会社',
+      '獲得日', '獲得者名', '獲得時の名乗り会社', '獲得チャネル',
       '商談日時', 'ステータス',
       '承認日時', '却下理由',
       'メモ', '登録日',
     ];
-    const companyTypeLabel = (t: string | null) => {
-      if (t === 'client') return 'クライアント名';
-      if (t === 'crafia') return 'Crafia名乗り';
-      if (t === 'self') return '自己着座';
-      return t || '';
-    };
     const rows = filtered.map(a => [
       (a as any).project?.project_number || '',
       (a as any).project?.title || '',
@@ -359,7 +354,8 @@ export default function PartnerAppointments() {
       a.contact_person || '',
       a.acquisition_date || '',
       a.acquirer_name || '',
-      companyTypeLabel(a.acquisition_company_type),
+      getCompanyTypeLabel((a as any).acquisition_company_type),
+      getChannelLabel((a as any).acquisition_channel, (a as any).acquisition_channel_note),
       format(new Date(a.meeting_datetime), 'yyyy/MM/dd HH:mm'),
       statusLabel(a.status),
       a.approved_at ? format(new Date(a.approved_at), 'yyyy/MM/dd HH:mm') : '',
@@ -525,9 +521,11 @@ export default function PartnerAppointments() {
                     <TableHead>案件</TableHead>
                     <TableHead>先方企業名</TableHead>
                     <TableHead>先方担当者名</TableHead>
-                    <TableHead>獲得者名</TableHead>
-                    <TableHead>登録企業</TableHead>
-                    <TableHead>商談日時</TableHead>
+                     <TableHead>獲得者名</TableHead>
+                     <TableHead>名乗り会社</TableHead>
+                     <TableHead>獲得チャネル</TableHead>
+                     <TableHead>登録企業</TableHead>
+                     <TableHead>商談日時</TableHead>
                     <TableHead>ステータス</TableHead>
                     <TableHead>登録日</TableHead>
                     <TableHead className="w-[140px]">操作</TableHead>
@@ -540,6 +538,8 @@ export default function PartnerAppointments() {
                       <TableCell className="text-muted-foreground">{a.target_company_name}</TableCell>
                       <TableCell>{a.contact_person || '—'}</TableCell>
                       <TableCell className="text-muted-foreground">{(a as any).acquirer_name || '—'}</TableCell>
+                      <TableCell className="text-muted-foreground">{getCompanyTypeLabel((a as any).acquisition_company_type)}</TableCell>
+                      <TableCell className="text-muted-foreground">{getChannelLabel((a as any).acquisition_channel, (a as any).acquisition_channel_note)}</TableCell>
                       <TableCell>
                         {a.org_id !== user?.org_id ? (
                           <span className="text-xs font-medium px-2 py-0.5 rounded bg-purple-100 text-purple-700">
@@ -594,7 +594,7 @@ export default function PartnerAppointments() {
                   ))}
                   {filtered.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
+                      <TableCell colSpan={11} className="text-center text-muted-foreground py-8">
                         {format(selectedMonth, 'yyyy年M月', { locale: ja })}のアポイントがありません
                       </TableCell>
                     </TableRow>
@@ -654,6 +654,14 @@ export default function PartnerAppointments() {
                 <div>
                   <p className="text-muted-foreground">獲得者名</p>
                   <p className="font-medium">{(selectedAppt as any).acquirer_name || '—'}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">名乗り会社</p>
+                  <p className="font-medium">{getCompanyTypeLabel((selectedAppt as any).acquisition_company_type)}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">獲得チャネル</p>
+                  <p className="font-medium">{getChannelLabel((selectedAppt as any).acquisition_channel, (selectedAppt as any).acquisition_channel_note)}</p>
                 </div>
               </div>
               {selectedAppt.rejected_reason && (

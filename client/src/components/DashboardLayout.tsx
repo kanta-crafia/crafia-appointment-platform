@@ -79,10 +79,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { label: '代理店別集計', href: '/agency-stats', icon: PieChart, adminOnly: true },
     { label: 'SNSアカウント', href: '/sns-accounts', icon: Share2, adminOnly: true },
     { label: '二次代理店卸単価', href: '/sub-allocation-prices', icon: Users, adminOnly: true },
-    { label: '通知', href: '/notifications', icon: Bell, badge: unreadCount },
     { label: '監査ログ', href: '/audit-logs', icon: FileText, adminOnly: true },
     ...(hasSubOrgs ? [{ label: '代理店管理', href: '/sub-partners', icon: Users }] : []),
     { label: '設定', href: '/settings', icon: Settings },
+    // 通知タブは本部側では非表示（メール通知機能は維持）
   ];
 
   const partnerNav: NavItem[] = [

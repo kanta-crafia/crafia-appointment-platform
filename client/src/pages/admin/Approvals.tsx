@@ -15,6 +15,7 @@ import { toast } from 'sonner';
 import { format, addMonths, subMonths, isSameMonth, isToday, isTomorrow } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import { Input } from '@/components/ui/input';
+import { getChannelLabel, getCompanyTypeLabel } from '@/lib/channelLabels';
 
 export default function Approvals() {
   const { user } = useAuth();
@@ -92,17 +93,11 @@ export default function Approvals() {
   const handleCsvDownload = () => {
     const headers = [
       '案件番号', '案件名', '先方企業名', '先方担当者名',
-      '登録企業', '獲得日', '獲得者名', '獲得時の名乗り会社',
+      '登録企業', '獲得日', '獲得者名', '獲得時の名乗り会社', '獲得チャネル',
       '商談日時', 'ステータス',
       '承認日時', '却下理由',
       'メモ', '登録日',
     ];
-    const companyTypeLabel = (t: string | null) => {
-      if (t === 'client') return 'クライアント名';
-      if (t === 'crafia') return 'Crafia名乗り';
-      if (t === 'self') return '自己着座';
-      return t || '';
-    };
     const rows = filtered.map(a => [
       (a as any).project?.project_number || '',
       (a as any).project?.title || '',
@@ -111,7 +106,8 @@ export default function Approvals() {
       (a as any).organization?.name || '',
       a.acquisition_date || '',
       a.acquirer_name || '',
-      companyTypeLabel(a.acquisition_company_type),
+      getCompanyTypeLabel((a as any).acquisition_company_type),
+      getChannelLabel((a as any).acquisition_channel, (a as any).acquisition_channel_note),
       format(new Date(a.meeting_datetime), 'yyyy/MM/dd HH:mm'),
       statusLabel(a.status),
       a.approved_at ? format(new Date(a.approved_at), 'yyyy/MM/dd HH:mm') : '',
@@ -450,6 +446,8 @@ export default function Approvals() {
                     <TableHead>先方企業名</TableHead>
                     <TableHead>登録企業</TableHead>
                     <TableHead>獲得者名</TableHead>
+                    <TableHead>名乗り会社</TableHead>
+                    <TableHead>獲得チャネル</TableHead>
                     <TableHead>商談日時</TableHead>
                     <TableHead>ステータス</TableHead>
                     <TableHead>登録日</TableHead>
@@ -463,6 +461,8 @@ export default function Approvals() {
                       <TableCell className="text-muted-foreground">{a.target_company_name}</TableCell>
                       <TableCell className="text-muted-foreground">{(a as any).organization?.name}</TableCell>
                       <TableCell className="text-muted-foreground">{(a as any).acquirer_name || '—'}</TableCell>
+                      <TableCell className="text-muted-foreground">{getCompanyTypeLabel((a as any).acquisition_company_type)}</TableCell>
+                      <TableCell className="text-muted-foreground">{getChannelLabel((a as any).acquisition_channel, (a as any).acquisition_channel_note)}</TableCell>
                       <TableCell className="text-sm">{format(new Date(a.meeting_datetime), 'yyyy/MM/dd HH:mm')}</TableCell>
                       <TableCell><StatusBadge status={a.status} /></TableCell>
                       <TableCell className="text-sm text-muted-foreground">{format(new Date(a.created_at), 'MM/dd HH:mm')}</TableCell>
@@ -474,7 +474,7 @@ export default function Approvals() {
                     </TableRow>
                   ))}
                   {filtered.length === 0 && (
-                    <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                    <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground py-8">
                       {format(selectedMonth, 'yyyy年M月', { locale: ja })}の該当するアポイントがありません
                     </TableCell></TableRow>
                   )}
@@ -533,6 +533,14 @@ export default function Approvals() {
                 <div>
                   <p className="text-muted-foreground">獲得者名</p>
                   <p className="font-medium">{(selectedAppt as any).acquirer_name || '—'}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">名乗り会社</p>
+                  <p className="font-medium">{getCompanyTypeLabel((selectedAppt as any).acquisition_company_type)}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">獲得チャネル</p>
+                  <p className="font-medium">{getChannelLabel((selectedAppt as any).acquisition_channel, (selectedAppt as any).acquisition_channel_note)}</p>
                 </div>
               </div>
               {selectedAppt.rejected_reason && (

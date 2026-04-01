@@ -39,6 +39,8 @@ export default function NewAppointment() {
   const [acquisitionDate, setAcquisitionDate] = useState('');
   const [acquirerName, setAcquirerName] = useState('');
   const [acquiredCompanyName, setAcquiredCompanyName] = useState('client');
+  const [acquisitionChannel, setAcquisitionChannel] = useState('');
+  const [acquisitionChannelNote, setAcquisitionChannelNote] = useState('');
   const [showProjectDetail, setShowProjectDetail] = useState(false);
   const [salesStaff, setSalesStaff] = useState<SalesStaff[]>([]);
 
@@ -233,6 +235,8 @@ export default function NewAppointment() {
       acquisition_date: acquisitionDate,
       acquirer_name: acquirerName,
       acquisition_company_type: acquiredCompanyName,
+      acquisition_channel: acquisitionChannel || null,
+      acquisition_channel_note: acquisitionChannel === 'other' ? (acquisitionChannelNote || null) : null,
       status: 'pending',
     });
 
@@ -252,7 +256,7 @@ export default function NewAppointment() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!allocationId || !targetCompany || !contactPerson || !meetingDatetime || !acquisitionDate || !acquirerName || !notes) {
+    if (!allocationId || !targetCompany || !contactPerson || !meetingDatetime || !acquisitionDate || !acquirerName || !acquisitionChannel || !notes) {
       toast.error('必須項目を入力してください');
       return;
     }
@@ -410,6 +414,27 @@ export default function NewAppointment() {
               </Select>
               <p className="text-xs text-muted-foreground">※着座いただく方が認識をされている会社名の入力をお願いします。</p>
               <p className="text-xs text-muted-foreground">※自己着座の場合、株式会社Crafia名乗りでアポ取得された形となります。</p>
+            </div>
+
+            <div className="space-y-2">
+              <Label>獲得チャネル <span className="text-destructive">*</span></Label>
+              <Select value={acquisitionChannel} onValueChange={setAcquisitionChannel}>
+                <SelectTrigger><SelectValue placeholder="チャネルを選択" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="sns">SNS</SelectItem>
+                  <SelectItem value="referral">紹介</SelectItem>
+                  <SelectItem value="self_seating">自己着座</SelectItem>
+                  <SelectItem value="phone">電話</SelectItem>
+                  <SelectItem value="other">その他</SelectItem>
+                </SelectContent>
+              </Select>
+              {acquisitionChannel === 'other' && (
+                <Input
+                  value={acquisitionChannelNote}
+                  onChange={(e) => setAcquisitionChannelNote(e.target.value)}
+                  placeholder="その他のチャネルを入力"
+                />
+              )}
             </div>
 
             <div className="space-y-2">

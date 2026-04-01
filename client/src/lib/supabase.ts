@@ -126,6 +126,8 @@ export interface Appointment {
   acquisition_date: string | null;
   acquirer_name: string | null;
   acquisition_company_type: string | null;
+  acquisition_channel: string | null;
+  acquisition_channel_note: string | null;
   status: AppointmentStatus;
   approved_by: string | null;
   approved_at: string | null;
