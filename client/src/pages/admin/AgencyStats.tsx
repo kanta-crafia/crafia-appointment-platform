@@ -19,6 +19,7 @@ interface OrgStats {
   pending: number;
   rejected: number;
   cancelled: number;
+  excluded: number;
   appointments: Appointment[];
 }
 
@@ -40,12 +41,15 @@ interface AgencyMonthlyData {
 }
 
 function calcStats(appts: Appointment[]): OrgStats {
+  const countable = appts.filter(a => !(a as any).project?.is_count_excluded);
+  const excludedAppts = appts.filter(a => (a as any).project?.is_count_excluded === true);
   return {
-    total: appts.length,
-    approved: appts.filter(a => a.status === 'approved').length,
-    pending: appts.filter(a => a.status === 'pending').length,
-    rejected: appts.filter(a => a.status === 'rejected').length,
-    cancelled: appts.filter(a => a.status === 'cancelled').length,
+    total: countable.length,
+    approved: countable.filter(a => a.status === 'approved').length,
+    pending: countable.filter(a => a.status === 'pending').length,
+    rejected: countable.filter(a => a.status === 'rejected').length,
+    cancelled: countable.filter(a => a.status === 'cancelled').length,
+    excluded: excludedAppts.length,
     appointments: appts,
   };
 }
@@ -112,7 +116,7 @@ export default function AgencyStats() {
         supabase.from('organizations').select('*').order('name'),
         supabase
           .from('appointments')
-          .select('*, project:projects(title, project_number, company_name, unit_price), organization:organizations(name), creator:users!appointments_created_by_user_id_fkey(full_name, login_id)')
+          .select('*, project:projects(title, project_number, company_name, unit_price, is_count_excluded), organization:organizations(name), creator:users!appointments_created_by_user_id_fkey(full_name, login_id)')
           .gte('meeting_datetime', monthStart + 'T00:00:00')
           .lte('meeting_datetime', monthEnd + 'T23:59:59')
           .order('meeting_datetime', { ascending: false }),
@@ -166,13 +170,18 @@ export default function AgencyStats() {
     return result;
   }, [primaryOrgs, orgs, appointments, filterOrg]);
 
-  const totalStats = useMemo(() => ({
-    total: appointments.length,
-    approved: appointments.filter(a => a.status === 'approved').length,
-    pending: appointments.filter(a => a.status === 'pending').length,
-    rejected: appointments.filter(a => a.status === 'rejected').length,
-    cancelled: appointments.filter(a => a.status === 'cancelled').length,
-  }), [appointments]);
+  const totalStats = useMemo(() => {
+    const countable = appointments.filter(a => !(a as any).project?.is_count_excluded);
+    const excluded = appointments.filter(a => (a as any).project?.is_count_excluded === true);
+    return {
+      total: countable.length,
+      approved: countable.filter(a => a.status === 'approved').length,
+      pending: countable.filter(a => a.status === 'pending').length,
+      rejected: countable.filter(a => a.status === 'rejected').length,
+      cancelled: countable.filter(a => a.status === 'cancelled').length,
+      excluded: excluded.length,
+    };
+  }, [appointments]);
 
   const prevMonth = () => setCurrentMonth(subMonths(currentMonth, 1));
   const nextMonth = () => setCurrentMonth(addMonths(currentMonth, 1));
@@ -283,6 +292,7 @@ export default function AgencyStats() {
           <TableCell className="text-center"><span className="text-xs text-amber-600">{node.stats.pending}</span></TableCell>
           <TableCell className="text-center"><span className="text-xs text-red-600">{node.stats.rejected}</span></TableCell>
           <TableCell className="text-center"><span className="text-xs text-gray-500">{node.stats.cancelled}</span></TableCell>
+          <TableCell className="text-center"><span className="text-xs text-slate-500">{node.stats.excluded}</span></TableCell>
           <TableCell className="text-center">
             <span className="text-xs text-muted-foreground">{nodeRate}%</span>
           </TableCell>
@@ -335,7 +345,7 @@ export default function AgencyStats() {
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-6 gap-3 mb-6">
         <Card className="border shadow-sm">
           <CardContent className="p-4 text-center">
             <p className="text-xs text-muted-foreground font-medium mb-1">合計</p>
@@ -366,6 +376,12 @@ export default function AgencyStats() {
             <p className="text-2xl font-bold text-gray-600">{totalStats.cancelled}</p>
           </CardContent>
         </Card>
+        <Card className="border shadow-sm border-l-4 border-l-slate-400">
+          <CardContent className="p-4 text-center">
+            <p className="text-xs text-slate-500 font-medium mb-1">非カウント</p>
+            <p className="text-2xl font-bold text-slate-600">{totalStats.excluded}</p>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Agency table */}
@@ -389,6 +405,7 @@ export default function AgencyStats() {
                 <TableHead className="text-center">保留中</TableHead>
                 <TableHead className="text-center">却下</TableHead>
                 <TableHead className="text-center">取消</TableHead>
+                <TableHead className="text-center">非カウント</TableHead>
                 <TableHead className="text-center">承認率</TableHead>
                 <TableHead className="text-right">操作</TableHead>
               </TableRow>
@@ -445,6 +462,9 @@ export default function AgencyStats() {
                         <Badge variant="outline" className="bg-gray-50 text-gray-600 border-gray-200">{agency.combined.cancelled}</Badge>
                       </TableCell>
                       <TableCell className="text-center">
+                        <Badge variant="outline" className="bg-slate-50 text-slate-600 border-slate-200">{agency.combined.excluded}</Badge>
+                      </TableCell>
+                      <TableCell className="text-center">
                         <div className="flex items-center justify-center gap-1.5">
                           <div className="w-16 h-2 bg-muted rounded-full overflow-hidden">
                             <div
@@ -479,6 +499,7 @@ export default function AgencyStats() {
                           <TableCell className="text-center"><span className="text-xs text-amber-600">{agency.own.pending}</span></TableCell>
                           <TableCell className="text-center"><span className="text-xs text-red-600">{agency.own.rejected}</span></TableCell>
                           <TableCell className="text-center"><span className="text-xs text-gray-500">{agency.own.cancelled}</span></TableCell>
+                          <TableCell className="text-center"><span className="text-xs text-slate-500">{agency.own.excluded}</span></TableCell>
                           <TableCell />
                           <TableCell />
                         </TableRow>
@@ -491,7 +512,7 @@ export default function AgencyStats() {
               })}
               {agencyData.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-muted-foreground py-12">
+                    <TableCell colSpan={9} className="text-center text-muted-foreground py-12">
                     {monthLabel}のアポイントデータがありません
                   </TableCell>
                 </TableRow>
@@ -513,7 +534,7 @@ export default function AgencyStats() {
           {selectedAgency && (
             <div>
               {/* Mini stats (合算) */}
-              <div className="grid grid-cols-5 gap-2 mb-4">
+              <div className="grid grid-cols-6 gap-2 mb-4">
                 <div className="text-center p-2 bg-muted/50 rounded-md">
                   <p className="text-xs text-muted-foreground">合計（合算）</p>
                   <p className="text-lg font-bold">{selectedAgency.combined.total}</p>
@@ -533,6 +554,10 @@ export default function AgencyStats() {
                 <div className="text-center p-2 bg-gray-50 rounded-md">
                   <p className="text-xs text-gray-500">取消</p>
                   <p className="text-lg font-bold text-gray-600">{selectedAgency.combined.cancelled}</p>
+                </div>
+                <div className="text-center p-2 bg-slate-50 rounded-md">
+                  <p className="text-xs text-slate-500">非カウント</p>
+                  <p className="text-lg font-bold text-slate-600">{selectedAgency.combined.excluded}</p>
                 </div>
               </div>
 

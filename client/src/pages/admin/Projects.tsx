@@ -51,6 +51,7 @@ export default function Projects() {
   const [status, setStatus] = useState<'active' | 'inactive' | 'closed'>('active');
   const [remainingCount, setRemainingCount] = useState(0);
   const [prohibitedListUrl, setProhibitedListUrl] = useState('');
+  const [isCountExcluded, setIsCountExcluded] = useState(false);
 
   const fetchProjects = useCallback(async () => {
     setLoading(true);
@@ -80,6 +81,7 @@ export default function Projects() {
     setServiceOverview(''); setProjectDetail(''); setAcquisitionConditions('');
     setUnitPrice(0); setSchedulingUrl(''); setIsUnlimited(false); setMaxAppts(0);
     setPriority('normal'); setStatus('active'); setProhibitedListUrl('');
+    setIsCountExcluded(false);
     setShowDialog(true);
   };
 
@@ -100,6 +102,7 @@ export default function Projects() {
     setPriority(p.priority || 'normal');
     setStatus(p.status);
     setProhibitedListUrl((p as any).prohibited_list_url || '');
+    setIsCountExcluded(p.is_count_excluded || false);
     setShowDialog(true);
   };
 
@@ -132,6 +135,7 @@ export default function Projects() {
         priority,
         status,
         prohibited_list_url: prohibitedListUrl || null,
+        is_count_excluded: isCountExcluded,
       };
 
       if (editProject) {
@@ -238,6 +242,7 @@ export default function Projects() {
                 <TableHead className="text-center">確定数</TableHead>
                 <TableHead className="text-center">残数</TableHead>
                 <TableHead className="text-center">優先度</TableHead>
+                <TableHead className="text-center">カウント</TableHead>
                 <TableHead>ステータス</TableHead>
                 <TableHead className="text-right">操作</TableHead>
               </TableRow>
@@ -260,6 +265,12 @@ export default function Projects() {
                         <PriIcon className="w-3 h-3" />{pri.label}
                       </span>
                     </TableCell>
+                    <TableCell className="text-center">
+                      {p.is_count_excluded
+                        ? <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">非カウント</span>
+                        : <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700">対象</span>
+                      }
+                    </TableCell>
                     <TableCell><StatusBadge status={p.status} /></TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
@@ -275,7 +286,7 @@ export default function Projects() {
                 );
               })}
               {projects.length === 0 && (
-                <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground py-8">案件がまだありません</TableCell></TableRow>
+                <TableRow><TableCell colSpan={11} className="text-center text-muted-foreground py-8">案件がまだありません</TableCell></TableRow>
               )}
             </TableBody>
           </Table>
@@ -389,6 +400,18 @@ export default function Projects() {
                 <p className="text-xs text-muted-foreground">確定数: {maxAppts - remainingCount} 件</p>
               </div>
             )}
+
+            {/* アポ数カウント対象外 */}
+            <div className="space-y-3">
+              <Label>アポ数カウント</Label>
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <Switch checked={isCountExcluded} onCheckedChange={setIsCountExcluded} />
+                  <span className="text-sm text-muted-foreground">カウント対象外にする</span>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">ONにすると、この案件のアポはアポ数集計から除外されます</p>
+            </div>
 
             {/* Row: 優先順位 + ステータス */}
             <div className="grid grid-cols-2 gap-4">

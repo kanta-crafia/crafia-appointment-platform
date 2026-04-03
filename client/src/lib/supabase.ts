@@ -96,6 +96,7 @@ export interface Project {
   created_at: string;
   created_by: string | null;
   prohibited_list_url: string | null;
+  is_count_excluded: boolean;
 }
 
 export interface Allocation {

@@ -81,7 +81,7 @@ export default function PartnerAppointments() {
       const allOrgIds = [userOrgId, ...childOrgIds];
       const { data } = await supabase
         .from('appointments')
-        .select('*, project:projects(title, project_number), organization:organizations(name)')
+        .select('*, project:projects(title, project_number, is_count_excluded), organization:organizations(name)')
         .in('org_id', allOrgIds)
         .order('meeting_datetime', { ascending: false });
       setAppointments(data || []);
@@ -291,7 +291,9 @@ export default function PartnerAppointments() {
 
   // ステータスフィルター: 月別フィルター後に適用
   const filtered = useMemo(() => {
-    return monthFiltered.filter(a => tab === 'all' || a.status === tab);
+    if (tab === 'all') return monthFiltered;
+    if (tab === 'excluded') return monthFiltered.filter(a => (a as any).project?.is_count_excluded === true);
+    return monthFiltered.filter(a => a.status === tab);
   }, [monthFiltered, tab]);
 
   // 当日・翌日のアポ（全アポから抽出、月に関係なく表示）
@@ -309,14 +311,17 @@ export default function PartnerAppointments() {
     }).sort((a, b) => new Date(a.meeting_datetime).getTime() - new Date(b.meeting_datetime).getTime());
   }, [appointments]);
 
-  // 月別のステータス別件数
+  // 月別のステータス別件数（非カウント案件を除外）
+  const countable = useMemo(() => monthFiltered.filter(a => !(a as any).project?.is_count_excluded), [monthFiltered]);
+  const excludedCount = useMemo(() => monthFiltered.filter(a => (a as any).project?.is_count_excluded === true).length, [monthFiltered]);
   const statusCounts = useMemo(() => ({
     all: monthFiltered.length,
-    pending: monthFiltered.filter(a => a.status === 'pending').length,
-    approved: monthFiltered.filter(a => a.status === 'approved').length,
-    rejected: monthFiltered.filter(a => a.status === 'rejected').length,
-    cancelled: monthFiltered.filter(a => a.status === 'cancelled').length,
-  }), [monthFiltered]);
+    pending: countable.filter(a => a.status === 'pending').length,
+    approved: countable.filter(a => a.status === 'approved').length,
+    rejected: countable.filter(a => a.status === 'rejected').length,
+    cancelled: countable.filter(a => a.status === 'cancelled').length,
+    excluded: excludedCount,
+  }), [monthFiltered, countable, excludedCount]);
 
   const goToPrevMonth = () => setSelectedMonth(prev => subMonths(prev, 1));
   const goToNextMonth = () => setSelectedMonth(prev => addMonths(prev, 1));
@@ -510,6 +515,7 @@ export default function PartnerAppointments() {
           <TabsTrigger value="approved">承認済 ({statusCounts.approved})</TabsTrigger>
           <TabsTrigger value="rejected">却下 ({statusCounts.rejected})</TabsTrigger>
           <TabsTrigger value="cancelled">取消 ({statusCounts.cancelled})</TabsTrigger>
+          <TabsTrigger value="excluded">非カウント ({statusCounts.excluded})</TabsTrigger>
         </TabsList>
 
         <TabsContent value={tab} className="mt-4">
