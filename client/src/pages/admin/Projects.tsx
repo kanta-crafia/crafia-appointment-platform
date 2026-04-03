@@ -66,9 +66,17 @@ export default function Projects() {
 
   useEffect(() => { fetchProjects(); }, [fetchProjects]);
 
+  const getNextProjectNumber = useCallback(() => {
+    const existingNumbers = projects
+      .map(p => parseInt(p.project_number || '0', 10))
+      .filter(n => !isNaN(n) && n > 0);
+    const maxNum = existingNumbers.length > 0 ? Math.max(...existingNumbers) : 0;
+    return String(maxNum + 1);
+  }, [projects]);
+
   const openCreate = () => {
     setEditProject(null);
-    setProjectNumber(''); setTitle(''); setCompanyName(''); setServiceName('');
+    setProjectNumber(getNextProjectNumber()); setTitle(''); setCompanyName(''); setServiceName('');
     setServiceOverview(''); setProjectDetail(''); setAcquisitionConditions('');
     setUnitPrice(0); setSchedulingUrl(''); setIsUnlimited(false); setMaxAppts(0);
     setPriority('normal'); setStatus('active'); setProhibitedListUrl('');
@@ -282,11 +290,12 @@ export default function Projects() {
             <DialogDescription>{editProject ? '案件情報を変更します' : '新しい案件を登録します'}</DialogDescription>
           </DialogHeader>
           <div className="space-y-5 py-2">
-            {/* Row 1: 案件番号 + 案件名 */}
+            {/* Row 1: 案件番号（自動採番） + 案件名 */}
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label>案件番号</Label>
-                <Input value={projectNumber} onChange={(e) => setProjectNumber(e.target.value)} placeholder="PRJ-001" />
+                <Input value={projectNumber} readOnly disabled className="bg-muted font-mono" />
+                <p className="text-xs text-muted-foreground">自動採番</p>
               </div>
               <div className="col-span-2 space-y-2">
                 <Label>案件名 <span className="text-destructive">*</span></Label>
