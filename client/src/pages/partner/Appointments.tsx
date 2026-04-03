@@ -290,9 +290,11 @@ export default function PartnerAppointments() {
   }, [appointments, selectedMonth]);
 
   // ステータスフィルター: 月別フィルター後に適用
+  // 非カウント = 承認済み＋非カウント案件のアポのみ（保留中・却下・取消は通常カウント）
   const filtered = useMemo(() => {
     if (tab === 'all') return monthFiltered;
-    if (tab === 'excluded') return monthFiltered.filter(a => (a as any).project?.is_count_excluded === true);
+    if (tab === 'excluded') return monthFiltered.filter(a => (a as any).project?.is_count_excluded === true && a.status === 'approved');
+    if (tab === 'approved') return monthFiltered.filter(a => a.status === 'approved' && !(a as any).project?.is_count_excluded);
     return monthFiltered.filter(a => a.status === tab);
   }, [monthFiltered, tab]);
 
@@ -311,17 +313,17 @@ export default function PartnerAppointments() {
     }).sort((a, b) => new Date(a.meeting_datetime).getTime() - new Date(b.meeting_datetime).getTime());
   }, [appointments]);
 
-  // 月別のステータス別件数（非カウント案件を除外）
-  const countable = useMemo(() => monthFiltered.filter(a => !(a as any).project?.is_count_excluded), [monthFiltered]);
-  const excludedCount = useMemo(() => monthFiltered.filter(a => (a as any).project?.is_count_excluded === true).length, [monthFiltered]);
+  // 月別のステータス別件数
+  // 非カウント = 承認済み＋非カウント案件のアポのみ
+  const excludedCount = useMemo(() => monthFiltered.filter(a => (a as any).project?.is_count_excluded === true && a.status === 'approved').length, [monthFiltered]);
   const statusCounts = useMemo(() => ({
     all: monthFiltered.length,
-    pending: countable.filter(a => a.status === 'pending').length,
-    approved: countable.filter(a => a.status === 'approved').length,
-    rejected: countable.filter(a => a.status === 'rejected').length,
-    cancelled: countable.filter(a => a.status === 'cancelled').length,
+    pending: monthFiltered.filter(a => a.status === 'pending').length,
+    approved: monthFiltered.filter(a => a.status === 'approved' && !(a as any).project?.is_count_excluded).length,
+    rejected: monthFiltered.filter(a => a.status === 'rejected').length,
+    cancelled: monthFiltered.filter(a => a.status === 'cancelled').length,
     excluded: excludedCount,
-  }), [monthFiltered, countable, excludedCount]);
+  }), [monthFiltered, excludedCount]);
 
   const goToPrevMonth = () => setSelectedMonth(prev => subMonths(prev, 1));
   const goToNextMonth = () => setSelectedMonth(prev => addMonths(prev, 1));

@@ -40,8 +40,9 @@ interface AgencyMonthlyData {
 }
 
 function calcStats(appts: Appointment[]): OrgStats {
-  const countable = appts.filter(a => !(a as any).project?.is_count_excluded);
-  const excludedAppts = appts.filter(a => (a as any).project?.is_count_excluded === true);
+  // 非カウント = 承認済み＋非カウント案件のアポのみ（保留中・却下・取消は通常カウント）
+  const excludedAppts = appts.filter(a => (a as any).project?.is_count_excluded === true && a.status === 'approved');
+  const countable = appts.filter(a => !excludedAppts.includes(a));
   return {
     total: countable.length,
     approved: countable.filter(a => a.status === 'approved').length,
@@ -185,8 +186,9 @@ export default function PartnerAgencyStats() {
   const ownStats = useMemo(() => calcStats(ownAppts), [ownAppts]);
 
   const totalStats = useMemo(() => {
-    const countable = appointments.filter(a => !(a as any).project?.is_count_excluded);
-    const excluded = appointments.filter(a => (a as any).project?.is_count_excluded === true);
+    // 非カウント = 承認済み＋非カウント案件のアポのみ
+    const excluded = appointments.filter(a => (a as any).project?.is_count_excluded === true && a.status === 'approved');
+    const countable = appointments.filter(a => !excluded.includes(a));
     return {
       total: countable.length,
       approved: countable.filter(a => a.status === 'approved').length,
