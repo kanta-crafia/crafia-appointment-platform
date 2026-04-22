@@ -540,4 +540,14 @@
 - [x] アポ一覧（Approvals/Appointments）の非カウントタブ・集計を修正
 - [x] 代理店別集計（AgencyStats/PartnerAgencyStats）の非カウント集計を修正
 - [x] テスト・検証（121件全パス）
-- [ ] GitHubプッシュ・Vercel公開
+- [x] GitHubプッシュ・Vercel公開
+
+## v3.8.2: アポ一覧に獲得チャネル列を追加
+- [x] Approvals.tsx（Crafia本部）のアポ一覧テーブルに獲得チャネル列を追加（v3.7.5で実装済み）
+- [x] Appointments.tsx（代理店）のアポ一覧テーブルに獲得チャネル列を追加（v3.7.5で実装済み）
+
+## v3.8.2: アポ残数を承認済みアポ数から自動計算に変更
+- [x] 現在のアポ残数管理の実装を調査（confirmed_count / remaining の仕組み）
+- [x] アポ残数を承認済みアポ数から自動計算するように修正（Projects/Dashboard/PartnerDashboard/MyAllocations/NewAppointment/Allocations）
+- [x] テスト・検証（133件全パス）
+- [ ] GitHubプッシュ

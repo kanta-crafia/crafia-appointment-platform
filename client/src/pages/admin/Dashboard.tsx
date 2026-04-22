@@ -23,6 +23,7 @@ export default function AdminDashboard() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [recentAppts, setRecentAppts] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [approvedCounts, setApprovedCounts] = useState<Record<string, number>>({});
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -36,8 +37,25 @@ export default function AdminDashboard() {
         supabase.from('appointments').select('*, project:projects(title, project_number), organization:organizations(name)').order('meeting_datetime', { ascending: false }).limit(5),
       ]);
 
-      setProjects(projRes.data || []);
+      const projData = projRes.data || [];
+      setProjects(projData);
       setRecentAppts(recentRes.data || []);
+
+      // 各案件の承認済みアポ数を集計
+      if (projData.length > 0) {
+        const projectIds = projData.map(p => p.id);
+        const { data: appts } = await supabase
+          .from('appointments')
+          .select('project_id')
+          .in('project_id', projectIds)
+          .eq('status', 'approved');
+        const counts: Record<string, number> = {};
+        (appts || []).forEach(a => {
+          counts[a.project_id] = (counts[a.project_id] || 0) + 1;
+        });
+        setApprovedCounts(counts);
+      }
+
       setStats({
         totalProjects: projRes.data?.length || 0,
         activeProjects: projRes.data?.filter(p => p.status === 'active').length || 0,
@@ -106,8 +124,9 @@ export default function AdminDashboard() {
               <div className="space-y-3">
                 {projects.map((p) => {
                   const isUnlimited = p.is_unlimited;
-                  const remaining = isUnlimited ? null : p.max_appointments_total - p.confirmed_count;
-                  const pct = !isUnlimited && p.max_appointments_total > 0 ? (p.confirmed_count / p.max_appointments_total) * 100 : 0;
+                  const confirmed = approvedCounts[p.id] || 0;
+                  const remaining = isUnlimited ? null : p.max_appointments_total - confirmed;
+                  const pct = !isUnlimited && p.max_appointments_total > 0 ? (confirmed / p.max_appointments_total) * 100 : 0;
                   return (
                     <div key={p.id} className="flex items-center gap-3">
                       <div className="flex-1 min-w-0">
@@ -119,11 +138,11 @@ export default function AdminDashboard() {
                                 <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${Math.min(pct, 100)}%` }} />
                               </div>
                               <span className="text-xs text-muted-foreground whitespace-nowrap">
-                                {p.confirmed_count}/{p.max_appointments_total}
+                                {confirmed}/{p.max_appointments_total}
                               </span>
                             </>
                           ) : (
-                            <span className="text-xs text-muted-foreground">確定: {p.confirmed_count}（無制限）</span>
+                            <span className="text-xs text-muted-foreground">確定: {confirmed}（無制限）</span>
                           )}
                         </div>
                       </div>

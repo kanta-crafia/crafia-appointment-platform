@@ -40,6 +40,7 @@ export default function Allocations() {
   const [childOrgId, setChildOrgId] = useState('');
   const [payout, setPayout] = useState(0);
   const [status, setStatus] = useState<'active' | 'inactive'>('active');
+  const [approvedCounts, setApprovedCounts] = useState<Record<string, number>>({});
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -52,6 +53,22 @@ export default function Allocations() {
       setAllocations(allocRes.data || []);
       setOrgs(orgRes.data || []);
       setProjects(projRes.data || []);
+
+      // 各案件の承認済みアポ数を集計
+      const projData = projRes.data || [];
+      if (projData.length > 0) {
+        const projectIds = projData.map((p: Project) => p.id);
+        const { data: appts } = await supabase
+          .from('appointments')
+          .select('project_id')
+          .in('project_id', projectIds)
+          .eq('status', 'approved');
+        const counts: Record<string, number> = {};
+        (appts || []).forEach((a: any) => {
+          counts[a.project_id] = (counts[a.project_id] || 0) + 1;
+        });
+        setApprovedCounts(counts);
+      }
     } catch (e) {
       console.error('Allocations fetch error:', e);
     } finally {
@@ -245,7 +262,7 @@ export default function Allocations() {
                 const proj = getProjectInfo(a);
                 const isUnlimited = proj?.is_unlimited;
                 const maxTotal = proj?.max_appointments_total || 0;
-                const confirmed = proj?.confirmed_count || 0;
+                const confirmed = proj ? (approvedCounts[proj.id] || 0) : 0;
                 return (
                   <TableRow key={a.id}>
                     <TableCell className="font-medium">

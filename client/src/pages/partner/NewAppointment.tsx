@@ -43,6 +43,7 @@ export default function NewAppointment() {
   const [acquisitionChannelNote, setAcquisitionChannelNote] = useState('');
   const [showProjectDetail, setShowProjectDetail] = useState(false);
   const [salesStaff, setSalesStaff] = useState<SalesStaff[]>([]);
+  const [approvedCounts, setApprovedCounts] = useState<Record<string, number>>({});
 
   // Stabilize dependency: use user.id + user.org_id instead of user object
   const userId = user?.id;
@@ -139,6 +140,21 @@ export default function NewAppointment() {
       allAllocs = [...directWithPrice, ...allAllocs];
 
       setAllocations(allAllocs);
+
+      // 各案件の承認済みアポ数を集計
+      const projectIds = Array.from(new Set(allAllocs.map(a => a.project_id).filter(Boolean)));
+      if (projectIds.length > 0) {
+        const { data: appts } = await supabase
+          .from('appointments')
+          .select('project_id')
+          .in('project_id', projectIds)
+          .eq('status', 'approved');
+        const counts: Record<string, number> = {};
+        (appts || []).forEach(a => {
+          counts[a.project_id] = (counts[a.project_id] || 0) + 1;
+        });
+        setApprovedCounts(counts);
+      }
     } catch (e) {
       console.error('Allocations fetch error:', e);
     } finally {
@@ -277,7 +293,8 @@ export default function NewAppointment() {
 
     // Check project limit
     if (selectedProject && !selectedProject.is_unlimited) {
-      const remaining = selectedProject.max_appointments_total - selectedProject.confirmed_count;
+      const approvedCount = approvedCounts[selectedProject.id] || 0;
+      const remaining = selectedProject.max_appointments_total - approvedCount;
       if (remaining <= 0) {
         toast.error('この案件の上限に達しています');
         return;
@@ -341,7 +358,7 @@ export default function NewAppointment() {
                     .map(a => {
                     const proj = (a as any).project;
                     const isUnlimited = proj?.is_unlimited;
-                    const remaining = isUnlimited ? null : (proj?.max_appointments_total || 0) - (proj?.confirmed_count || 0);
+                    const remaining = isUnlimited ? null : (proj?.max_appointments_total || 0) - (approvedCounts[proj?.id] || 0);
                     const isFull = !isUnlimited && remaining !== null && remaining <= 0;
                     const projectInactive = proj?.status === 'inactive';
                     const projectNumber = proj?.project_number ? `[${proj.project_number}] ` : '';
@@ -359,7 +376,7 @@ export default function NewAppointment() {
                 <p className="text-xs text-muted-foreground">
                   {selectedProject.is_unlimited
                     ? '上限: 無制限'
-                    : `残枠: ${selectedProject.max_appointments_total - selectedProject.confirmed_count}件`
+                    : `残枠: ${selectedProject.max_appointments_total - (approvedCounts[selectedProject.id] || 0)}件`
                   }
                 </p>
               )}

@@ -10,6 +10,7 @@ export default function PartnerDashboard() {
   const [allocations, setAllocations] = useState<Allocation[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [approvedCounts, setApprovedCounts] = useState<Record<string, number>>({});
 
   // Stabilize dependency: use primitive values instead of user object
   const userId = user?.id;
@@ -86,6 +87,21 @@ export default function PartnerDashboard() {
 
       setAllocations(allAllocs);
       setAppointments(apptData || []);
+
+      // 各案件の承認済みアポ数を集計
+      const projectIds = Array.from(new Set(allAllocs.map((a: Allocation) => a.project_id).filter(Boolean)));
+      if (projectIds.length > 0) {
+        const { data: approvedAppts } = await supabase
+          .from('appointments')
+          .select('project_id')
+          .in('project_id', projectIds)
+          .eq('status', 'approved');
+        const counts: Record<string, number> = {};
+        (approvedAppts || []).forEach((a: any) => {
+          counts[a.project_id] = (counts[a.project_id] || 0) + 1;
+        });
+        setApprovedCounts(counts);
+      }
     } catch (e) {
       console.error('Dashboard data fetch error:', e);
     } finally {
@@ -151,7 +167,7 @@ export default function PartnerDashboard() {
                 const proj = (a as any).project;
                 const isUnlimited = proj?.is_unlimited;
                 const maxTotal = proj?.max_appointments_total || 0;
-                const confirmed = proj?.confirmed_count || 0;
+                const confirmed = proj ? (approvedCounts[proj.id] || 0) : 0;
                 const pct = !isUnlimited && maxTotal > 0 ? (confirmed / maxTotal) * 100 : 0;
                 const myAppts = appointments.filter(ap => ap.project_id === a.project_id);
                 const myApproved = myAppts.filter(ap => ap.status === 'approved').length;
@@ -162,6 +178,11 @@ export default function PartnerDashboard() {
                       <p className="text-sm font-medium">{proj?.title || '案件'}</p>
                       <span className="text-xs text-muted-foreground">
                         {isUnlimited ? `確定: ${confirmed}（無制限）` : `${confirmed}/${maxTotal}`}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-xs text-muted-foreground">
+                        自社: 承認{myApproved}件 / 待ち{myPending}件
                       </span>
                     </div>
                     {!isUnlimited && (

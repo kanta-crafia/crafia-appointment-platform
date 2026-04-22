@@ -20,6 +20,7 @@ export default function MyAllocations() {
   const [loading, setLoading] = useState(true);
   const [detailProject, setDetailProject] = useState<Project | null>(null);
   const [showDetail, setShowDetail] = useState(false);
+  const [approvedCounts, setApprovedCounts] = useState<Record<string, number>>({});
 
   // Stabilize dependency: use primitive values instead of user object
   const userOrgId = user?.org_id;
@@ -120,7 +121,23 @@ export default function MyAllocations() {
         effectivePayoutPerAppointment: Number(a.payout_per_appointment),
       }));
 
-      setAllocations([...directWithPrice, ...inheritedAllocations]);
+      const allAllocs = [...directWithPrice, ...inheritedAllocations];
+      setAllocations(allAllocs);
+
+      // 各案件の承認済みアポ数を集計
+      const projectIds = Array.from(new Set(allAllocs.map(a => a.project_id).filter(Boolean)));
+      if (projectIds.length > 0) {
+        const { data: appts } = await supabase
+          .from('appointments')
+          .select('project_id')
+          .in('project_id', projectIds)
+          .eq('status', 'approved');
+        const counts: Record<string, number> = {};
+        (appts || []).forEach(a => {
+          counts[a.project_id] = (counts[a.project_id] || 0) + 1;
+        });
+        setApprovedCounts(counts);
+      }
     } catch (e) {
       console.error('Allocations fetch error:', e);
     } finally {
@@ -169,7 +186,7 @@ export default function MyAllocations() {
                 const project = (a as any).project as Project | undefined;
                 const isUnlimited = project?.is_unlimited;
                 const maxTotal = project?.max_appointments_total || 0;
-                const confirmed = project?.confirmed_count || 0;
+                const confirmed = project ? (approvedCounts[project.id] || 0) : 0;
                 const remaining = isUnlimited ? null : maxTotal - confirmed;
                 const isFull = !isUnlimited && remaining !== null && remaining <= 0;
                 const isActive = a.status === 'active';

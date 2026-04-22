@@ -49,15 +49,32 @@ export default function Projects() {
   const [maxAppts, setMaxAppts] = useState(0);
   const [priority, setPriority] = useState<Priority>('normal');
   const [status, setStatus] = useState<'active' | 'inactive' | 'closed'>('active');
-  const [remainingCount, setRemainingCount] = useState(0);
+  // remainingCount state removed - now auto-calculated from approved appointments
   const [prohibitedListUrl, setProhibitedListUrl] = useState('');
   const [isCountExcluded, setIsCountExcluded] = useState(false);
+
+  const [approvedCounts, setApprovedCounts] = useState<Record<string, number>>({});
 
   const fetchProjects = useCallback(async () => {
     setLoading(true);
     try {
       const { data } = await supabase.from('projects').select('*').order('created_at', { ascending: false });
       setProjects(data || []);
+
+      // 各案件の承認済みアポ数を集計
+      if (data && data.length > 0) {
+        const projectIds = data.map(p => p.id);
+        const { data: appts } = await supabase
+          .from('appointments')
+          .select('project_id')
+          .in('project_id', projectIds)
+          .eq('status', 'approved');
+        const counts: Record<string, number> = {};
+        (appts || []).forEach(a => {
+          counts[a.project_id] = (counts[a.project_id] || 0) + 1;
+        });
+        setApprovedCounts(counts);
+      }
     } catch (e) {
       console.error('Projects fetch error:', e);
     } finally {
@@ -98,7 +115,6 @@ export default function Projects() {
     setSchedulingUrl(p.scheduling_url || '');
     setIsUnlimited(p.is_unlimited || false);
     setMaxAppts(p.max_appointments_total);
-    setRemainingCount(p.is_unlimited ? 0 : p.max_appointments_total - p.confirmed_count);
     setPriority(p.priority || 'normal');
     setStatus(p.status);
     setProhibitedListUrl((p as any).prohibited_list_url || '');
@@ -114,11 +130,6 @@ export default function Projects() {
     }
     setSaving(true);
     try {
-      // 残数から confirmed_count を逆算
-      const newConfirmedCount = editProject && !isUnlimited
-        ? Math.max(0, maxAppts - remainingCount)
-        : (editProject ? editProject.confirmed_count : 0);
-
       const payload = {
         title,
         project_number: projectNumber || null,
@@ -131,7 +142,6 @@ export default function Projects() {
         scheduling_url: schedulingUrl || null,
         is_unlimited: isUnlimited,
         max_appointments_total: isUnlimited ? 0 : maxAppts,
-        confirmed_count: newConfirmedCount,
         priority,
         status,
         prohibited_list_url: prohibitedListUrl || null,
@@ -207,9 +217,11 @@ export default function Projects() {
     setDeleteTarget(null);
   };
 
+  const getConfirmedCount = (p: Project) => approvedCounts[p.id] || 0;
+
   const getRemainingCount = (p: Project) => {
     if (p.is_unlimited) return '—';
-    return p.max_appointments_total - p.confirmed_count;
+    return p.max_appointments_total - getConfirmedCount(p);
   };
 
   const getMaxDisplay = (p: Project) => {
@@ -258,7 +270,7 @@ export default function Projects() {
                     <TableCell className="text-sm">{p.company_name || '—'}</TableCell>
                     <TableCell className="text-right font-mono">{p.unit_price ? `¥${p.unit_price.toLocaleString()}` : '—'}</TableCell>
                     <TableCell className="text-center">{getMaxDisplay(p)}</TableCell>
-                    <TableCell className="text-center font-semibold text-emerald-700">{p.confirmed_count}</TableCell>
+                    <TableCell className="text-center font-semibold text-emerald-700">{getConfirmedCount(p)}</TableCell>
                     <TableCell className="text-center">{getRemainingCount(p)}</TableCell>
                     <TableCell className="text-center">
                       <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded ${pri.className}`}>
@@ -362,7 +374,7 @@ export default function Projects() {
               <Label>アポイント上限（月単位）</Label>
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-2">
-                  <Switch checked={isUnlimited} onCheckedChange={(v) => { setIsUnlimited(v); if (v) setRemainingCount(0); }} />
+                  <Switch checked={isUnlimited} onCheckedChange={(v) => { setIsUnlimited(v); }} />
                   <span className="text-sm text-muted-foreground">無制限</span>
                 </div>
                 {!isUnlimited && (
@@ -373,7 +385,6 @@ export default function Projects() {
                     onChange={(e) => {
                       const newMax = Number(e.target.value);
                       setMaxAppts(newMax);
-                      if (!editProject) setRemainingCount(newMax);
                     }}
                     className="w-32"
                     placeholder="10"
@@ -382,22 +393,17 @@ export default function Projects() {
               </div>
             </div>
 
-            {/* 残数（編集時のみ表示） */}
+            {/* 確定数・残数（編集時のみ表示、自動計算） */}
             {editProject && !isUnlimited && (
               <div className="space-y-2">
-                <Label>残数（直接編集可能）</Label>
+                <Label>確定数・残数（自動計算）</Label>
                 <div className="flex items-center gap-3">
-                  <Input
-                    type="number"
-                    min={0}
-                    max={maxAppts}
-                    value={remainingCount}
-                    onChange={(e) => setRemainingCount(Math.min(maxAppts, Math.max(0, Number(e.target.value))))}
-                    className="w-32"
-                  />
-                  <span className="text-sm text-muted-foreground">/ {maxAppts}</span>
+                  <span className="text-sm font-semibold text-emerald-700">確定: {approvedCounts[editProject.id] || 0}件</span>
+                  <span className="text-sm text-muted-foreground">/</span>
+                  <span className="text-sm">残: {maxAppts - (approvedCounts[editProject.id] || 0)}件</span>
+                  <span className="text-sm text-muted-foreground">/ 上限 {maxAppts}件</span>
                 </div>
-                <p className="text-xs text-muted-foreground">確定数: {maxAppts - remainingCount} 件</p>
+                <p className="text-xs text-muted-foreground">承認済みアポ数から自動計算されます</p>
               </div>
             )}
 
