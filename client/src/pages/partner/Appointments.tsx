@@ -66,19 +66,31 @@ export default function PartnerAppointments() {
     }
     setLoading(true);
     try {
-      // 自組織の子組織（二次代理店）を取得
-      const { data: childOrgs } = await supabase
+      // 全組織を取得して再帰的に全子孫組織を特定
+      const { data: allOrgs } = await supabase
         .from('organizations')
-        .select('id, name')
-        .eq('parent_org_id', userOrgId);
+        .select('id, name, parent_org_id')
+        .order('name');
 
-      const childOrgIds = (childOrgs || []).map(o => o.id);
+      // 再帰的に全子孫組織IDを取得（孫・ひ孫含む）
+      const descendantIds: string[] = [];
       const orgNameMap: Record<string, string> = {};
-      (childOrgs || []).forEach(o => { orgNameMap[o.id] = o.name; });
+      const queue = [userOrgId];
+      while (queue.length > 0) {
+        const parentId = queue.shift()!;
+        const children = (allOrgs || []).filter(o => o.parent_org_id === parentId && o.id !== userOrgId);
+        for (const child of children) {
+          if (!descendantIds.includes(child.id)) {
+            descendantIds.push(child.id);
+            orgNameMap[child.id] = child.name;
+            queue.push(child.id);
+          }
+        }
+      }
       setChildOrgNames(orgNameMap);
 
-      // 自組織 + 子組織のアポを取得
-      const allOrgIds = [userOrgId, ...childOrgIds];
+      // 自組織 + 全子孫組織のアポを取得
+      const allOrgIds = [userOrgId, ...descendantIds];
       const { data } = await supabase
         .from('appointments')
         .select('*, project:projects(title, project_number, is_count_excluded), organization:organizations(name)')

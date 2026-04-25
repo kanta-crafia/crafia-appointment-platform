@@ -551,3 +551,9 @@
 - [x] アポ残数を承認済みアポ数から自動計算するように修正（Projects/Dashboard/PartnerDashboard/MyAllocations/NewAppointment/Allocations）
 - [x] テスト・検証（133件全パス）
 - [ ] GitHubプッシュ
+
+## v3.8.3: 3次代理店（孫）のアポが1次代理店から見えない問題の修正
+- [x] 現在の組織階層とアポ表示ロジックを調査
+- [x] 子孫代理店のアポを親が見れるように修正（Appointments.tsxのfetchAppointmentsを再帰的全子孫取得に変更）
+- [x] テスト・検証（141件全パス）
+- [ ] GitHubプッシュ
